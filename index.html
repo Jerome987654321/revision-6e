@@ -122,7 +122,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 5;
+const APP_VERSION = 6;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -317,7 +317,9 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, exactement de 
 function oaMessage(status, msg, label) {
   if (status === 401) return `${label} ne reconnaît pas cette clé (401 : ${msg || 'clé refusée'}). Elle est mal copiée ou a été supprimée : crée une nouvelle clé et recopie-la en entier dans les réglages.`;
   if (status === 402) return `${label} demande du crédit pour ce modèle : choisis un modèle gratuit dans les réglages.`;
-  if (status === 429) return 'Limite gratuite atteinte pour le moment. Réessaie dans quelques minutes (ou demain).';
+  if (status === 429) return /per.day|daily|quota/i.test(msg)
+    ? `Limite gratuite du jour atteinte chez ${label}. Réessaie demain.${msg ? ' (' + msg + ')' : ''}`
+    : `Les modèles gratuits sont saturés en ce moment. Réessaie dans quelques minutes.${msg ? ' (' + msg + ')' : ''}`;
   if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
   if (status >= 500) return `Le service ${label} est surchargé. Réessaie dans une minute.`;
   return `Erreur ${label} ${status}${msg ? ' : ' + msg : ''}`;
@@ -335,7 +337,7 @@ async function oa(p, path, body) {
     await new Promise(r => setTimeout(r, 3000));
   }
   if (!res.ok) {
-    let msg = ''; try { const j = await res.json(); msg = j.error?.message || j.message || j.detail || ''; if (typeof msg !== 'string') msg = JSON.stringify(msg); } catch {}
+    let msg = ''; try { const j = await res.json(); msg = [j.error?.message || j.message || j.detail || '', j.error?.metadata?.raw].filter(x => x && typeof x === 'string').join(' — '); if (typeof msg !== 'string') msg = JSON.stringify(msg); } catch {}
     const err = new ApiError(oaMessage(res.status, msg, PROVIDERS[p].label)); err.status = res.status; throw err;
   }
   return res.json();
@@ -351,15 +353,30 @@ async function oaGenerate(p, blobs, matiere) {
   if (!model) throw new ApiError('Choisis un modèle dans les réglages (bouton « Vérifier la clé »).');
   const content = [{ type: 'text', text: buildPrompt(matiere) + JSON_SHAPE }];
   for (const b of blobs) content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + await b64(b) } });
-  const body = { model, messages: [{ role: 'user', content }], temperature: .4, response_format: { type: 'json_object' } };
-  let data;
-  try { data = await oa(p, '/chat/completions', body); }
-  catch (e) {
-    if (e.status !== 400) throw e;
-    delete body.response_format;            // certains modèles gratuits ne connaissent pas le mode JSON
-    data = await oa(p, '/chat/completions', body);
+  // Les modèles gratuits sont souvent saturés : on essaie le modèle choisi, puis les autres modèles de la liste.
+  const others = await KV.get('models:' + p, []);
+  const models = [...new Set([model, ...others, ...(p === 'openrouter' ? ['openrouter/free'] : [])])].slice(0, 6);
+  let lastErr;
+  for (const m of models) {
+    const body = { model: m, messages: [{ role: 'user', content }], temperature: .4, response_format: { type: 'json_object' } };
+    try {
+      let data;
+      try { data = await oa(p, '/chat/completions', body); }
+      catch (e) {
+        if (e.status !== 400) throw e;
+        delete body.response_format;            // certains modèles gratuits ne connaissent pas le mode JSON
+        data = await oa(p, '/chat/completions', body);
+      }
+      const r = parseJsonText(data.choices?.[0]?.message?.content);
+      if (m !== model) toast(`Modèle de secours utilisé : ${m}`);
+      return r;
+    } catch (e) {
+      lastErr = e;
+      const retryable = e.status === 429 || e.status === 400 || e.status === 404 || e.status >= 500 || !e.status;
+      if (!retryable || (e.status === 429 && /du jour/.test(e.message))) throw e;
+    }
   }
-  return parseJsonText(data.choices?.[0]?.message?.content);
+  throw lastErr;
 }
 async function oaModels(p) {
   const list = (await oa(p, '/models')).data || [];
@@ -420,6 +437,8 @@ async function viewHome() {
   const due = dueEntries(ls).length;
   let h = '';
   if (!(await keyOf(await KV.get('provider', 'gemini')))) h += `<div class="card notice">👋 Pour commencer, ajoute une clé d'IA gratuite dans les <a href="#/settings">réglages</a>.</div>`;
+  await loadPending();
+  if (pending.length) h += `<div class="card notice">📷 ${pending.length} photo${pending.length > 1 ? 's' : ''} en attente : <a href="#/new">reprendre la création de la leçon</a>.</div>`;
   h += `<div class="hero">
     <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
     <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
@@ -440,8 +459,17 @@ async function viewHome() {
 }
 
 // --- Nouvelle leçon
-let pending = [], pendingMat = 'auto';
-function viewNew() {
+let pending = [], pendingMat = 'auto', pendingLoaded = false;
+// Les photos prises restent sur l'appareil tant que la leçon n'est pas créée (mise à jour, fermeture, erreur).
+const savePending = () => KV.set('pending', pending.length ? { photos: pending, mat: pendingMat } : null);
+async function loadPending() {
+  if (pendingLoaded) return;
+  const s = await KV.get('pending', null);
+  if (s && !pending.length) { pending = s.photos || []; pendingMat = s.mat || 'auto'; }
+  pendingLoaded = true;
+}
+async function viewNew() {
+  await loadPending();
   const opts = ['auto', ...MATIERES].map(m => `<option value="${esc(m)}"${m === pendingMat ? ' selected' : ''}>${m === 'auto' ? 'Détecter automatiquement' : esc(m)}</option>`).join('');
   setView(`<h1>📷 Nouvelle leçon</h1>
   <div class="card">
@@ -452,7 +480,7 @@ function viewNew() {
     </div>
     <div class="thumbs">${pending.map((b, i) => `<div class="thumb"><img src="${urlOf(b)}" alt="Page ${i + 1}"><button onclick="act.rmPhoto(${i})" aria-label="Retirer">✕</button></div>`).join('')}</div>
     <label for="n-mat">Matière</label>
-    <select id="n-mat" onchange="pendingMat=this.value">${opts}</select>
+    <select id="n-mat" onchange="pendingMat=this.value; savePending()">${opts}</select>
   </div>
   <div class="sticky"><button class="btn pri big" ${pending.length ? '' : 'disabled'} onclick="act.generate()">✨ Créer les révisions</button></div>`);
 }
@@ -462,25 +490,27 @@ act.addFiles = async input => {
   for (const f of files) {
     try { pending.push(await compress(f)); } catch { toast('Image illisible : ' + f.name); }
   }
+  await savePending();
   viewNew();
 };
-act.rmPhoto = i => { pending.splice(i, 1); viewNew(); };
+act.rmPhoto = async i => { pending.splice(i, 1); await savePending(); viewNew(); };
 act.generate = async () => {
   const photos = pending.slice();
   setView(`<div class="card center"><div class="spinner"></div><h2>L'IA lit la leçon…</h2>
-    <p class="mute">Cela prend en général 10 à 60 secondes.</p></div>`);
+    <p class="mute">Cela prend en général 10 à 60 secondes.</p><p class="mute small">Tes photos restent sur l'appareil jusqu'à la création de la leçon.</p></div>`);
   try {
     const r = await generate(photos, pendingMat);
-    if (r.lisible === false) throw new ApiError('Gemini n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
+    if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
     const l = toLesson(r, photos, pendingMat);
     if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
     await Lessons.put(l);
     pending = []; pendingMat = 'auto'; E = null;
+    await savePending();
     location.hash = '#/review/' + l.id;
   } catch (e) {
     console.error(e);
     setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
-      <div class="row"><button class="btn pri" onclick="act.generate()">Réessayer</button><button class="btn" onclick="viewNew()">Modifier les photos</button>
+      <div class="row"><button class="btn pri" onclick="act.generate()">Réessayer</button><a class="btn" href="#/new">Modifier les photos</a>
       <a class="btn" href="#/settings">Réglages</a></div></div>`);
   }
 };
@@ -775,6 +805,7 @@ act.checkKey = async () => {
       await oa(p, '/key');
     }
     const names = p === 'gemini' ? await geminiModels() : await oaModels(p);
+    if (p !== 'gemini') await KV.set('models:' + p, names);
     if (!names.length) throw new ApiError('Clé acceptée, mais aucun modèle capable de lire une photo n\'est disponible.');
     const cur = $('#s-model').value;
     $('#s-model').innerHTML = names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
