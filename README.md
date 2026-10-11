@@ -1,6 +1,6 @@
 # Révisions 6e
 
-Web-app installable (PWA) : on photographie une leçon, Gemini (clé gratuite Google AI Studio)
+Web-app installable (PWA) : on photographie une leçon, une IA gratuite (Gemini, OpenRouter, Groq ou Mistral, au choix dans les réglages)
 prépare une fiche résumé, des cartes, des QCM, des vrai/faux et des textes à trous ; l'enfant
 révise avec la répétition espacée (boîtes de Leitner).
 
@@ -29,7 +29,7 @@ Le dépôt ne contient ni la clé ni aucune donnée : elles ne vivent que sur l'
 - **Tablette Android** : ouvrir l'adresse dans Chrome → ⋮ → « Ajouter à l'écran d'accueil » / « Installer l'application ».
 - **Windows** : ouvrir l'adresse dans Edge ou Chrome → icône « Installer » dans la barre d'adresse.
 
-Puis ⚙️ Réglages → coller la clé de https://aistudio.google.com/apikey → « Vérifier la clé » → « Enregistrer ».
+Puis ⚙️ Réglages → choisir l'IA → coller sa clé → « Vérifier » → « Enregistrer ». Les clés Gemini « AQ. » sont souvent refusées par Google (401) : OpenRouter est alors le plus simple.
 
 ## Mettre à jour
 

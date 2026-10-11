@@ -122,7 +122,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 3;
+const APP_VERSION = 4;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -301,7 +301,81 @@ async function gemini(path, init) {
   }
   throw new ApiError(apiMessage(firstErr.status, firstErr.msg));
 }
+// ---------- Autres fournisseurs (API compatible OpenAI) ----------
+const PROVIDERS = {
+  gemini: { label: 'Google Gemini', keyUrl: 'https://aistudio.google.com/apikey' },
+  openrouter: { label: 'OpenRouter (modèles gratuits)', base: 'https://openrouter.ai/api/v1', keyUrl: 'https://openrouter.ai/settings/keys' },
+  groq: { label: 'Groq', base: 'https://api.groq.com/openai/v1', keyUrl: 'https://console.groq.com/keys' },
+  mistral: { label: 'Mistral', base: 'https://api.mistral.ai/v1', keyUrl: 'https://console.mistral.ai/api-keys' },
+};
+const keyOf = p => KV.get(p === 'gemini' ? 'apiKey' : 'key:' + p, '');
+const modelOf = p => KV.get(p === 'gemini' ? 'model' : 'model:' + p, p === 'gemini' ? DEFAULT_MODEL : '');
+const JSON_SHAPE = `
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, exactement de cette forme :
+{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"..."}]}`;
+function oaMessage(status, msg, label) {
+  if (status === 401) return `${label} refuse la clé (401). Vérifie-la dans les réglages.${msg ? ' Message : ' + msg : ''}`;
+  if (status === 402) return `${label} demande du crédit pour ce modèle : choisis un modèle gratuit dans les réglages.`;
+  if (status === 429) return 'Limite gratuite atteinte pour le moment. Réessaie dans quelques minutes (ou demain).';
+  if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
+  if (status >= 500) return `Le service ${label} est surchargé. Réessaie dans une minute.`;
+  return `Erreur ${label} ${status}${msg ? ' : ' + msg : ''}`;
+}
+async function oa(p, path, body) {
+  const key = (await keyOf(p)).replace(/\s+/g, '');
+  if (!key) throw new ApiError('Ajoute d\'abord ta clé dans les réglages ⚙️.');
+  const headers = { Authorization: 'Bearer ' + key, ...(body ? { 'Content-Type': 'application/json' } : {}),
+    ...(p === 'openrouter' ? { 'X-Title': 'Revisions 6e' } : {}) };
+  let res;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { res = await fetch(PROVIDERS[p].base + path, body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers }); }
+    catch { throw new ApiError(`Pas de connexion internet, ou ${PROVIDERS[p].label} refuse les appels depuis le navigateur.`); }
+    if (res.status < 500) break;
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  if (!res.ok) {
+    let msg = ''; try { const j = await res.json(); msg = j.error?.message || j.message || j.detail || ''; if (typeof msg !== 'string') msg = JSON.stringify(msg); } catch {}
+    const err = new ApiError(oaMessage(res.status, msg, PROVIDERS[p].label)); err.status = res.status; throw err;
+  }
+  return res.json();
+}
+function parseJsonText(text) {
+  const t = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const a = t.indexOf('{'), z = t.lastIndexOf('}');
+  if (a < 0 || z < a) throw new ApiError('L\'IA n\'a pas renvoyé de questions. Réessaie, ou choisis un autre modèle.');
+  try { return JSON.parse(t.slice(a, z + 1)); } catch { throw new ApiError('Réponse de l\'IA illisible. Réessaie, ou choisis un autre modèle.'); }
+}
+async function oaGenerate(p, blobs, matiere) {
+  const model = await modelOf(p);
+  if (!model) throw new ApiError('Choisis un modèle dans les réglages (bouton « Vérifier la clé »).');
+  const content = [{ type: 'text', text: buildPrompt(matiere) + JSON_SHAPE }];
+  for (const b of blobs) content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + await b64(b) } });
+  const body = { model, messages: [{ role: 'user', content }], temperature: .4, response_format: { type: 'json_object' } };
+  let data;
+  try { data = await oa(p, '/chat/completions', body); }
+  catch (e) {
+    if (e.status !== 400) throw e;
+    delete body.response_format;            // certains modèles gratuits ne connaissent pas le mode JSON
+    data = await oa(p, '/chat/completions', body);
+  }
+  return parseJsonText(data.choices?.[0]?.message?.content);
+}
+async function oaModels(p) {
+  const list = (await oa(p, '/models')).data || [];
+  const free = m => !m.pricing || (Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0);
+  const vision = m => (m.architecture?.input_modalities || []).includes('image') || m.capabilities?.vision === true
+    || /vision|llama-4|scout|maverick|pixtral|gemma-3|qwen.*vl|vl-/i.test(m.id);
+  const names = list.filter(m => vision(m) && (p !== 'openrouter' || free(m))).map(m => m.id)
+    .filter(n => !/safety|guard|lyria|tts|audio|embed|moderation|ocr/i.test(n));
+  const rank = n => /gemini|gemma/.test(n) ? 0 : /mistral|pixtral/.test(n) ? 1 : /llama-4|maverick|scout/.test(n) ? 2 : /qwen/.test(n) ? 3 : 4;
+  return names.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
 async function generate(blobs, matiere) {
+  const p = await KV.get('provider', 'gemini');
+  return p === 'gemini' ? geminiGenerate(blobs, matiere) : oaGenerate(p, blobs, matiere);
+}
+async function geminiGenerate(blobs, matiere) {
   const model = (await KV.get('model', DEFAULT_MODEL)).replace(/^models\//, '');
   const parts = [{ text: buildPrompt(matiere) }];
   for (const b of blobs) parts.push({ inline_data: { mime_type: 'image/jpeg', data: await b64(b) } });
@@ -345,7 +419,7 @@ async function viewHome() {
   const ls = (await Lessons.all()).sort((a, b) => b.createdAt - a.createdAt);
   const due = dueEntries(ls).length;
   let h = '';
-  if (!(await KV.get('apiKey', ''))) h += `<div class="card notice">👋 Pour commencer, ajoute ta clé Gemini gratuite dans les <a href="#/settings">réglages</a>.</div>`;
+  if (!(await keyOf(await KV.get('provider', 'gemini')))) h += `<div class="card notice">👋 Pour commencer, ajoute une clé d'IA gratuite dans les <a href="#/settings">réglages</a>.</div>`;
   h += `<div class="hero">
     <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
     <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
@@ -393,7 +467,7 @@ act.addFiles = async input => {
 act.rmPhoto = i => { pending.splice(i, 1); viewNew(); };
 act.generate = async () => {
   const photos = pending.slice();
-  setView(`<div class="card center"><div class="spinner"></div><h2>Gemini lit la leçon…</h2>
+  setView(`<div class="card center"><div class="spinner"></div><h2>L'IA lit la leçon…</h2>
     <p class="mute">Cela prend en général 10 à 60 secondes.</p></div>`);
   try {
     const r = await generate(photos, pendingMat);
@@ -637,54 +711,75 @@ function renderEnd() {
 }
 
 // --- Réglages
+let setProv = null;   // fournisseur affiché dans les réglages (pas encore forcément enregistré)
 async function viewSettings() {
-  const key = await KV.get('apiKey', ''), model = await KV.get('model', DEFAULT_MODEL);
+  const p = setProv ||= await KV.get('provider', 'gemini');
+  const key = await keyOf(p), model = await modelOf(p);
   let storage = '';
   try {
     const est = await navigator.storage.estimate(), persisted = await navigator.storage.persisted();
     storage = `${(est.usage / 1048576).toFixed(1)} Mo utilisés sur cet appareil · ${persisted ? 'stockage protégé ✅' : 'stockage non protégé (le navigateur pourrait le vider s\'il manque de place)'}`;
   } catch {}
+  const help = {
+    gemini: `<li>Ouvre <a href="${PROVIDERS.gemini.keyUrl}" target="_blank" rel="noopener">aistudio.google.com/apikey</a> avec un compte Google d'adulte, « Créer une clé API », copie-la.</li>
+      <li>Les nouvelles clés <code>AQ.</code> sont souvent refusées par Google (erreur 401) : dans ce cas, prends un autre fournisseur.</li>`,
+    openrouter: `<li>Crée un compte gratuit sur <a href="https://openrouter.ai" target="_blank" rel="noopener">openrouter.ai</a> (aucune carte bancaire nécessaire).</li>
+      <li>Ouvre <a href="${PROVIDERS.openrouter.keyUrl}" target="_blank" rel="noopener">Settings → Keys</a>, « Create Key », copie la clé (<code>sk-or-…</code>).</li>
+      <li>« Vérifier la clé » liste uniquement les modèles <b>gratuits</b> qui savent lire une photo. Environ 50 leçons par jour.</li>`,
+    groq: `<li>Crée un compte gratuit sur <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a>.</li>
+      <li>Ouvre <a href="${PROVIDERS.groq.keyUrl}" target="_blank" rel="noopener">API Keys</a>, « Create API Key », copie la clé (<code>gsk_…</code>).</li>`,
+    mistral: `<li>Crée un compte sur <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a> et choisis l'offre gratuite « Experiment » (vérification par SMS).</li>
+      <li>Ouvre <a href="${PROVIDERS.mistral.keyUrl}" target="_blank" rel="noopener">API Keys</a>, crée une clé, copie-la.</li>`,
+  }[p];
   setView(`<h1>⚙️ Réglages</h1>
   <div class="card">
-    <h2 style="margin-top:0">Clé Gemini (gratuite)</h2>
-    <ol class="small">
-      <li>Ouvre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> avec un compte Google d'adulte.</li>
-      <li>Clique sur « Create API key » puis copie la clé (elle commence par <code>AIza</code>).</li>
-      <li>Colle-la ici. Elle reste uniquement sur cet appareil.</li>
-    </ol>
+    <label for="s-prov" style="margin-top:0">Intelligence artificielle utilisée</label>
+    <select id="s-prov" onchange="act.pickProvider(this.value)">${Object.entries(PROVIDERS).map(([k, v]) =>
+      `<option value="${k}"${k === p ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
+    <ol class="small">${help}<li>Colle la clé ici. Elle reste uniquement sur cet appareil.</li></ol>
     <label for="s-key">Clé</label>
     <div class="row"><input type="password" id="s-key" value="${esc(key)}" autocomplete="off" style="flex:1">
       <button class="btn" onclick="const i=$('#s-key');i.type=i.type==='password'?'text':'password'">👁️</button></div>
     <label for="s-model">Modèle</label>
-    <select id="s-model"><option>${esc(model)}</option></select>
-    <p id="s-check" class="small mute">« Vérifier la clé » teste la clé et liste les modèles disponibles.</p>
-    <div class="row"><button class="btn" onclick="act.checkKey()">🔍 Vérifier la clé</button><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
+    <select id="s-model">${model ? `<option>${esc(model)}</option>` : '<option value="">— vérifie la clé pour choisir —</option>'}</select>
+    <p id="s-check" class="small mute">Le bouton « Vérifier » teste la clé et liste les modèles disponibles.</p>
+    <div class="row"><button class="btn" id="s-verify" onclick="act.checkKey()">🔍 Vérifier</button><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
   </div>
   <p class="small mute">${storage}</p>
   <p class="small mute">Version ${APP_VERSION}</p>`);
 }
+act.pickProvider = v => { setProv = v; viewSettings(); };
+async function storeKey(p, key, model) {
+  await KV.set(p === 'gemini' ? 'apiKey' : 'key:' + p, key);
+  if (model !== undefined) await KV.set(p === 'gemini' ? 'model' : 'model:' + p, model);
+}
+async function geminiModels() {
+  const data = await gemini('/models?pageSize=200');
+  const names = (data.models || [])
+    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map(m => m.name.replace(/^models\//, ''))
+    .filter(n => /^gemini/.test(n) && !/(tts|image|embedding|live|audio|robotics|computer|native)/.test(n));
+  const rank = n => (n === DEFAULT_MODEL ? 0 : /flash/.test(n) && !/lite|preview|exp/.test(n) ? 1 : /flash/.test(n) ? 2 : 3);
+  return names.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
+}
 act.checkKey = async () => {
-  await KV.set('apiKey', $('#s-key').value.trim());
-  const out = $('#s-check'); out.textContent = 'Vérification…';
+  const p = setProv, out = $('#s-check');
+  await storeKey(p, $('#s-key').value.trim());
+  out.textContent = 'Vérification…';
   try {
-    const data = await gemini('/models?pageSize=200');
-    const names = (data.models || [])
-      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-      .map(m => m.name.replace(/^models\//, ''))
-      .filter(n => /^gemini/.test(n) && !/(tts|image|embedding|live|audio|robotics|computer|native)/.test(n));
-    if (!names.length) throw new ApiError('Aucun modèle Gemini disponible avec cette clé.');
-    const rank = n => (n === DEFAULT_MODEL ? 0 : /flash/.test(n) && !/lite|preview|exp/.test(n) ? 1 : /flash/.test(n) ? 2 : 3);
-    names.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
+    const names = p === 'gemini' ? await geminiModels() : await oaModels(p);
+    if (!names.length) throw new ApiError('Clé acceptée, mais aucun modèle capable de lire une photo n\'est disponible.');
     const cur = $('#s-model').value;
     $('#s-model').innerHTML = names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
-    out.textContent = `✅ Clé valide — ${names.length} modèles disponibles. Un modèle « flash » suffit largement.`;
+    out.textContent = `✅ Clé valide — ${names.length} modèle${names.length > 1 ? 's' : ''} disponible${names.length > 1 ? 's' : ''}. Celui proposé en premier convient.`;
   } catch (e) { out.textContent = '❌ ' + e.message; }
 };
 act.saveSettings = async () => {
-  const key = $('#s-key').value.trim(), model = $('#s-model').value;
-  await KV.set('apiKey', key);
-  await KV.set('model', model);
-  toast('Réglages enregistrés');
+  const p = setProv, key = $('#s-key').value.trim(), model = $('#s-model').value;
+  await storeKey(p, key, model);
+  await KV.set('provider', p);
+  setProv = null;
+  toast(`Réglages enregistrés (${PROVIDERS[p].label})`);
   go('#/');
 };
 
