@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b6fe0">
+<title>Révisions 6e</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f6fb; --card:#ffffff; --ink:#1d2433; --mute:#667085; --line:#e3e7ef;
+  --pri:#3b6fe0; --pri-ink:#ffffff; --soft:#eaf0fd;
+  --ok:#1f9d55; --ok-bg:#e3f6ea; --ko:#d64545; --ko-bg:#fdeaea; --warn-bg:#fff6e0;
+  --shadow:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12151c; --card:#1c212b; --ink:#e8ecf3; --mute:#9aa4b5; --line:#2c3341;
+    --pri:#6b95f5; --pri-ink:#0d1220; --soft:#222c40;
+    --ok:#4cc683; --ok-bg:#16301f; --ko:#f07878; --ko-bg:#3a1c1c; --warn-bg:#3a2f12;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font:18px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+a{color:var(--pri)}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;
+  padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:var(--card);border-bottom:1px solid var(--line)}
+header .logo{font-weight:800;font-size:20px;text-decoration:none;color:var(--ink);flex:1}
+header .streak{font-weight:700;white-space:nowrap}
+header .gear{font-size:24px;text-decoration:none}
+main{max-width:980px;margin:0 auto;padding:16px 16px 120px}
+h1{font-size:26px;margin:8px 0 12px} h2{font-size:21px;margin:22px 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow);margin:12px 0}
+.notice{background:var(--warn-bg)}
+.mute{color:var(--mute)} .center{text-align:center} .small{font-size:15px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:12px 20px;
+  border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  font-family:inherit;font-weight:600;font-size:18px;line-height:1.2;text-decoration:none;cursor:pointer;user-select:none}
+.btn:active{transform:scale(.98)}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:var(--pri-ink)}
+.btn.danger{color:var(--ko)}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.btn.big{min-height:76px;font-size:21px;border-radius:18px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 6px}
+@media (max-width:560px){.hero{grid-template-columns:1fr}}
+.pill{background:rgba(255,255,255,.25);border-radius:99px;padding:2px 10px;font-size:17px}
+.badge{display:inline-block;background:var(--warn-bg);border-radius:99px;padding:1px 10px;font-size:14px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.tile{display:block;background:var(--card);border:1px solid var(--line);border-left:6px solid hsl(var(--h) 65% 55%);
+  border-radius:16px;padding:14px;text-decoration:none;color:var(--ink);box-shadow:var(--shadow)}
+.tile-t{font-weight:700;font-size:19px}
+.tile-m{color:var(--mute);font-size:15px;margin-top:6px}
+.stars{color:#f2a900;letter-spacing:2px}
+.mat{display:flex;align-items:center;gap:8px}
+.mat::before{content:"";width:12px;height:12px;border-radius:4px;background:hsl(var(--h) 65% 55%)}
+label{display:block;font-weight:600;margin:12px 0 6px}
+input[type=text],input[type=password],textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+textarea{resize:vertical}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:12px 0}
+.thumb{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb button{position:absolute;top:6px;right:6px;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:18px}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.spinner{width:56px;height:56px;border-radius:50%;border:6px solid var(--soft);border-top-color:var(--pri);animation:spin 1s linear infinite;margin:24px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.item{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:var(--bg)}
+.item-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px;color:var(--mute)}
+.item-h button{border:0;background:none;font-size:22px;cursor:pointer}
+.choice-row{display:flex;gap:8px;align-items:center;margin:6px 0}
+.choice-row input[type=radio]{width:24px;height:24px;flex:none}
+.sticky{position:fixed;left:0;right:0;bottom:0;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));
+  background:var(--card);border-top:1px solid var(--line);display:flex;gap:10px;justify-content:center;z-index:5}
+.progress{height:10px;background:var(--soft);border-radius:99px;overflow:hidden;margin:6px 0 14px}
+.progress div{height:100%;background:var(--pri);border-radius:99px;transition:width .3s}
+.play{max-width:760px;margin:0 auto}
+.q{font-size:24px;font-weight:650;line-height:1.35;margin:6px 0 18px}
+.kind{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mute)}
+.choices{display:grid;gap:10px}
+.choices .btn{justify-content:flex-start;text-align:left;min-height:62px;font-weight:550}
+.btn.good{background:var(--ok-bg);border-color:var(--ok);color:var(--ink)}
+.btn.bad{background:var(--ko-bg);border-color:var(--ko);color:var(--ink)}
+.flash{min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  font-size:26px;font-weight:650;cursor:pointer;border:2px dashed var(--line)}
+.flash .verso{color:var(--pri);margin-top:16px}
+.fb{border-radius:14px;padding:14px;margin:14px 0;font-size:19px}
+.fb.ok{background:var(--ok-bg)} .fb.ko{background:var(--ko-bg)}
+.blank{display:inline-block;min-width:90px;border-bottom:3px solid var(--pri);text-align:center;color:var(--pri)}
+.speak{border:0;background:none;font-size:24px;cursor:pointer;vertical-align:middle}
+.resume li{margin:10px 0;font-size:20px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;display:flex;align-items:center;justify-content:center}
+.overlay img{max-width:100%;max-height:100%}
+#toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:10px 18px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30;max-width:90vw}
+#toast.on{opacity:1}
+.big-emoji{font-size:72px;text-align:center;margin:10px 0}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="#/">📚 Révisions 6e</a>
+  <span class="streak" id="streak"></span>
+  <a class="gear" href="#/settings" aria-label="Réglages">⚙️</a>
+</header>
+<main id="app"></main>
+<div id="toast"></div>
+<script>
+'use strict';
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chimie','Technologie','Anglais','Espagnol','Allemand','Musique','Arts plastiques','Autre'];
+const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
+const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
+const MAX_PHOTOS = 6;
+const API = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_MODEL = 'gemini-flash-latest';
+const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
+
+// ---------- Stockage local (IndexedDB) ----------
+let dbp;
+function db() {
+  return dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('revision6e', 1);
+    r.onupgradeneeded = () => {
+      r.result.createObjectStore('lessons', { keyPath: 'id' });
+      r.result.createObjectStore('kv', { keyPath: 'k' });
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function tx(store, mode, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction(store, mode);
+    let out;
+    const r = fn(t.objectStore(store));
+    if (r) r.onsuccess = () => { out = r.result; };
+    t.oncomplete = () => res(out);
+    t.onerror = t.onabort = () => rej(t.error);
+  });
+}
+const Lessons = {
+  all: () => tx('lessons', 'readonly', s => s.getAll()),
+  get: id => tx('lessons', 'readonly', s => s.get(id)),
+  put: l => tx('lessons', 'readwrite', s => s.put(l)),
+  del: id => tx('lessons', 'readwrite', s => s.delete(id)),
+};
+const KV = {
+  async get(k, def) { const r = await tx('kv', 'readonly', s => s.get(k)); return r ? r.v : def; },
+  set: (k, v) => tx('kv', 'readwrite', s => s.put({ k, v })),
+};
+
+// ---------- Utilitaires ----------
+function today() { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000); }
+const dateFr = ts => new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+function hue(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+function mastery(l) { return l.items.length ? l.items.reduce((a, it) => a + Math.min(it.box || 0, 5), 0) / (5 * l.items.length) : 0; }
+function starsOf(l) { const m = mastery(l); const n = m >= .8 ? 3 : m >= .5 ? 2 : m >= .2 ? 1 : 0; return `<span class="stars">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span>`; }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600); }
+function speak(text) {
+  if (!('speechSynthesis' in window)) return toast('Lecture à voix haute indisponible');
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(String(text).replace(/_{2,}/g, ' blanc ')); u.lang = 'fr-FR'; u.rate = .95;
+  speechSynthesis.speak(u);
+}
+const speakBtn = text => `<button class="speak" aria-label="Lire" onclick="speak(${esc(JSON.stringify(text))})">🔊</button>`;
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[’`]/g, "'").replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ').trim()
+  .replace(/^(l'|le |la |les |un |une |des |du |de la |de l')/, '').trim();
+
+let objectUrls = [], nextUrls = [];
+function urlOf(blob) { const u = URL.createObjectURL(blob); nextUrls.push(u); return u; }
+function setView(html) {
+  objectUrls.forEach(u => URL.revokeObjectURL(u));
+  objectUrls = nextUrls; nextUrls = [];
+  $('#app').innerHTML = html;
+  window.scrollTo(0, 0);
+}
+async function renderStreak() {
+  const st = await KV.get('streak', { last: -1, n: 0 });
+  const n = st.last >= today() - 1 ? st.n : 0;
+  $('#streak').textContent = n ? `🔥 ${n} jour${n > 1 ? 's' : ''}` : '';
+}
+async function bumpStreak() {
+  const t = today(); const st = await KV.get('streak', { last: -1, n: 0 });
+  if (st.last === t) return;
+  st.n = st.last === t - 1 ? st.n + 1 : 1; st.last = t;
+  await KV.set('streak', st); renderStreak();
+}
+
+// ---------- Photos ----------
+async function compress(file) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', .85));
+}
+const b64 = blob => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(',')[1]);
+  r.onerror = () => rej(r.error);
+  r.readAsDataURL(blob);
+});
+function showPhoto(src) {
+  const o = document.createElement('div'); o.className = 'overlay';
+  o.innerHTML = `<img src="${src}" alt="">`; o.onclick = () => o.remove();
+  document.body.appendChild(o);
+}
+
+// ---------- Gemini ----------
+const S_STR = { type: 'STRING' };
+const SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    lisible: { type: 'BOOLEAN' },
+    matiere: S_STR,
+    titre: S_STR,
+    resume: { type: 'ARRAY', items: S_STR },
+    flashcards: { type: 'ARRAY', items: { type: 'OBJECT', properties: { recto: S_STR, verso: S_STR }, required: ['recto', 'verso'] } },
+    qcm: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+      question: S_STR, choix: { type: 'ARRAY', items: S_STR }, bonne: { type: 'INTEGER' }, explication: S_STR },
+      required: ['question', 'choix', 'bonne', 'explication'] } },
+    vrai_faux: { type: 'ARRAY', items: { type: 'OBJECT', properties: { affirmation: S_STR, vrai: { type: 'BOOLEAN' }, correction: S_STR },
+      required: ['affirmation', 'vrai', 'correction'] } },
+    trous: { type: 'ARRAY', items: { type: 'OBJECT', properties: { phrase: S_STR, reponse: S_STR }, required: ['phrase', 'reponse'] } },
+  },
+  required: ['lisible', 'matiere', 'titre', 'resume', 'flashcards', 'qcm', 'vrai_faux', 'trous'],
+};
+function buildPrompt(matiere) {
+  return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
+Voici la ou les photos d'une leçon (cahier, manuel ou fiche), dans l'ordre des pages.
+Matière : ${matiere && matiere !== 'auto' ? matiere : `à déterminer parmi : ${MATIERES.join(', ')}`}.
+
+Règles :
+- Utilise UNIQUEMENT le contenu des photos. N'ajoute aucune notion qui n'y figure pas.
+- Si les photos sont illisibles ou ne contiennent pas de leçon, mets lisible=false et laisse les listes vides.
+- Français, phrases courtes et simples, vocabulaire d'un élève de 6e. Pour une leçon de langue étrangère, consignes en français, mots et phrases à apprendre dans la langue étudiée.
+- Recopie fidèlement l'orthographe des noms propres, dates, formules et mots de vocabulaire.
+- Couvre toute la leçon, sans répéter la même notion sous la même forme.
+- titre : le titre de la leçon (court).
+- resume : 4 à 8 points essentiels, une phrase chacun.
+- flashcards : 6 à 12 cartes (définitions, dates, vocabulaire, formules, règles). recto = question courte, verso = réponse courte.
+- qcm : 6 à 10 questions, exactement 4 choix plausibles dont un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase.
+- vrai_faux : 4 à 8 affirmations, environ la moitié fausses ; correction = la phrase juste.
+- trous : 4 à 8 phrases de la leçon où UN mot-clé est remplacé par ___ (trois tirets bas) ; reponse = le mot manquant (1 à 3 mots).`;
+}
+class ApiError extends Error {}
+function apiMessage(status, msg) {
+  if (/api key not valid|API_KEY_INVALID/i.test(msg)) return 'La clé Gemini n\'est pas valide. Vérifie-la dans les réglages.';
+  if (status === 429) return 'Quota gratuit atteint pour le moment. Réessaie dans quelques minutes (ou demain).';
+  if (status === 403) return 'Clé refusée par Google (API non activée ou clé restreinte).';
+  if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
+  if (status >= 500) return 'Le service Gemini est surchargé. Réessaie dans une minute.';
+  return `Erreur Gemini ${status}${msg ? ' : ' + msg : ''}`;
+}
+async function gemini(path, init) {
+  const key = await KV.get('apiKey', '');
+  if (!key) throw new ApiError('Ajoute d\'abord ta clé Gemini dans les réglages ⚙️.');
+  const headers = { 'x-goog-api-key': key, ...(init?.body ? { 'Content-Type': 'application/json' } : {}) };
+  let res;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { res = await fetch(API + path, { ...init, headers }); }
+    catch { throw new ApiError('Pas de connexion internet.'); }
+    if (res.status < 500) break;
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  if (!res.ok) {
+    let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
+    throw new ApiError(apiMessage(res.status, msg));
+  }
+  return res.json();
+}
+async function generate(blobs, matiere) {
+  const model = (await KV.get('model', DEFAULT_MODEL)).replace(/^models\//, '');
+  const parts = [{ text: buildPrompt(matiere) }];
+  for (const b of blobs) parts.push({ inline_data: { mime_type: 'image/jpeg', data: await b64(b) } });
+  const data = await gemini(`/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: .4 },
+    }),
+  });
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('');
+  if (!text) throw new ApiError(`Gemini n'a rien renvoyé (${cand?.finishReason || data.promptFeedback?.blockReason || 'raison inconnue'}).`);
+  try { return JSON.parse(text); } catch { throw new ApiError('Réponse de Gemini illisible. Réessaie.'); }
+}
+function toLesson(r, blobs, matiere) {
+  const s = v => String(v ?? '').trim();
+  const items = [];
+  for (const c of r.flashcards || []) if (s(c.recto) && s(c.verso)) items.push({ type: 'card', recto: s(c.recto), verso: s(c.verso) });
+  for (const q of r.qcm || []) {
+    const choix = (q.choix || []).map(s).filter(Boolean); const b = Number(q.bonne);
+    if (s(q.question) && choix.length >= 2 && b >= 0 && b < choix.length)
+      items.push({ type: 'qcm', question: s(q.question), choix, bonne: b, explication: s(q.explication) });
+  }
+  for (const v of r.vrai_faux || []) if (s(v.affirmation)) items.push({ type: 'vf', affirmation: s(v.affirmation), vrai: !!v.vrai, correction: s(v.correction) });
+  for (const t of r.trous || []) {
+    const phrase = s(t.phrase).replace(/_{2,}/g, '___');
+    if (phrase.includes('___') && s(t.reponse)) items.push({ type: 'trou', phrase, reponse: s(t.reponse) });
+  }
+  items.forEach(it => Object.assign(it, { id: uid(), box: 0, due: 0 }));
+  const m = matiere && matiere !== 'auto' ? matiere : (MATIERES.includes(s(r.matiere)) ? s(r.matiere) : 'Autre');
+  return { id: uid(), createdAt: Date.now(), status: 'draft', matiere: m, titre: s(r.titre) || 'Leçon sans titre',
+    resume: (r.resume || []).map(s).filter(Boolean), photos: blobs, items };
+}
+
+// ---------- Vues ----------
+const act = {};
+const dueEntries = ls => ls.filter(l => l.status === 'ready').flatMap(l => l.items.filter(it => (it.due || 0) <= today()).map(it => ({ l, it })));
+
+async function viewHome() {
+  const ls = (await Lessons.all()).sort((a, b) => b.createdAt - a.createdAt);
+  const due = dueEntries(ls).length;
+  let h = '';
+  if (!(await KV.get('apiKey', ''))) h += `<div class="card notice">👋 Pour commencer, ajoute ta clé Gemini gratuite dans les <a href="#/settings">réglages</a>.</div>`;
+  h += `<div class="hero">
+    <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
+    <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
+  if (!ls.length) h += `<p class="mute center">Aucune leçon pour l'instant. Prends en photo une leçon du cahier !</p>`;
+  const byMat = {};
+  for (const l of ls) (byMat[l.matiere] ||= []).push(l);
+  for (const m of Object.keys(byMat).sort((a, b) => a.localeCompare(b, 'fr'))) {
+    h += `<h2 class="mat" style="--h:${hue(m)}">${esc(m)}</h2><div class="grid">`;
+    for (const l of byMat[m]) {
+      const draft = l.status === 'draft';
+      h += `<a class="tile" style="--h:${hue(m)}" href="#/${draft ? 'review' : 'lesson'}/${l.id}">
+        <div class="tile-t">${esc(l.titre)}</div>
+        <div class="tile-m">${draft ? '<span class="badge">à relire</span>' : starsOf(l)} · ${l.items.length} questions · ${dateFr(l.createdAt)}</div></a>`;
+    }
+    h += `</div>`;
+  }
+  setView(h);
+}
+
+// --- Nouvelle leçon
+let pending = [], pendingMat = 'auto';
+function viewNew() {
+  const opts = ['auto', ...MATIERES].map(m => `<option value="${esc(m)}"${m === pendingMat ? ' selected' : ''}>${m === 'auto' ? 'Détecter automatiquement' : esc(m)}</option>`).join('');
+  setView(`<h1>📷 Nouvelle leçon</h1>
+  <div class="card">
+    <p class="mute small">Une photo par page, bien à plat, avec de la lumière et sans reflet. Jusqu'à ${MAX_PHOTOS} pages.</p>
+    <div class="row">
+      <label class="btn pri filebtn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" onchange="act.addFiles(this)"></label>
+      <label class="btn filebtn">🖼️ Choisir des images<input type="file" accept="image/*" multiple onchange="act.addFiles(this)"></label>
+    </div>
+    <div class="thumbs">${pending.map((b, i) => `<div class="thumb"><img src="${urlOf(b)}" alt="Page ${i + 1}"><button onclick="act.rmPhoto(${i})" aria-label="Retirer">✕</button></div>`).join('')}</div>
+    <label for="n-mat">Matière</label>
+    <select id="n-mat" onchange="pendingMat=this.value">${opts}</select>
+  </div>
+  <div class="sticky"><button class="btn pri big" ${pending.length ? '' : 'disabled'} onclick="act.generate()">✨ Créer les révisions</button></div>`);
+}
+act.addFiles = async input => {
+  const files = [...input.files].slice(0, MAX_PHOTOS - pending.length);
+  if (input.files.length > files.length) toast(`Maximum ${MAX_PHOTOS} pages par leçon`);
+  for (const f of files) {
+    try { pending.push(await compress(f)); } catch { toast('Image illisible : ' + f.name); }
+  }
+  viewNew();
+};
+act.rmPhoto = i => { pending.splice(i, 1); viewNew(); };
+act.generate = async () => {
+  const photos = pending.slice();
+  setView(`<div class="card center"><div class="spinner"></div><h2>Gemini lit la leçon…</h2>
+    <p class="mute">Cela prend en général 10 à 60 secondes.</p></div>`);
+  try {
+    const r = await generate(photos, pendingMat);
+    if (r.lisible === false) throw new ApiError('Gemini n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
+    const l = toLesson(r, photos, pendingMat);
+    if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
+    await Lessons.put(l);
+    pending = []; pendingMat = 'auto'; E = null;
+    location.hash = '#/review/' + l.id;
+  } catch (e) {
+    console.error(e);
+    setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
+      <div class="row"><button class="btn pri" onclick="act.generate()">Réessayer</button><button class="btn" onclick="viewNew()">Modifier les photos</button>
+      <a class="btn" href="#/settings">Réglages</a></div></div>`);
+  }
+};
+
+// --- Relecture / modification
+let E = null;
+async function viewReview(id) {
+  E = await Lessons.get(id);
+  if (!E) return go('#/');
+  renderReview();
+}
+function field(f, v, label, rows = 1) {
+  return `<label>${label}</label>` + (rows > 1
+    ? `<textarea data-f="${f}" rows="${rows}">${esc(v)}</textarea>`
+    : `<input type="text" data-f="${f}" value="${esc(v)}">`);
+}
+function itemEditor(it, n) {
+  let b = '';
+  if (it.type === 'card') b = field('recto', it.recto, 'Question (recto)', 2) + field('verso', it.verso, 'Réponse (verso)', 2);
+  if (it.type === 'qcm') b = field('question', it.question, 'Question', 2) + `<label>Choix (coche le bon)</label>` +
+    it.choix.map((c, i) => `<div class="choice-row"><input type="radio" name="b-${it.id}" value="${i}"${i === it.bonne ? ' checked' : ''}>
+      <input type="text" data-f="choix" data-i="${i}" value="${esc(c)}"></div>`).join('') + field('explication', it.explication, 'Explication');
+  if (it.type === 'vf') b = field('affirmation', it.affirmation, 'Affirmation', 2) +
+    `<label>Réponse</label><select data-f="vrai"><option value="1"${it.vrai ? ' selected' : ''}>Vrai</option><option value="0"${it.vrai ? '' : ' selected'}>Faux</option></select>` +
+    field('correction', it.correction, 'Correction');
+  if (it.type === 'trou') b = field('phrase', it.phrase, 'Phrase (garde ___ à la place du mot)', 2) + field('reponse', it.reponse, 'Mot manquant');
+  return `<div class="item" data-id="${it.id}"><div class="item-h"><span>${n}. ${KIND[it.type]}</span>
+    <button onclick="act.delItem('${it.id}')" aria-label="Supprimer">🗑️</button></div>${b}</div>`;
+}
+function renderReview() {
+  const l = E;
+  const mats = MATIERES.includes(l.matiere) ? MATIERES : [l.matiere, ...MATIERES];
+  let h = `<h1>✏️ Relire la leçon</h1>
+  <p class="mute small">Vérifie ce que Gemini a préparé : corrige ou supprime ce qui est faux avant de réviser.</p>
+  <div class="card">
+    <label for="r-titre">Titre</label><input type="text" id="r-titre" value="${esc(l.titre)}">
+    <label for="r-mat">Matière</label><select id="r-mat">${mats.map(m => `<option${m === l.matiere ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select>
+    <label for="r-resume">Fiche résumé (une idée par ligne)</label>
+    <textarea id="r-resume" rows="${Math.max(4, l.resume.length + 1)}">${esc(l.resume.join('\n'))}</textarea>
+  </div>`;
+  for (const type of ['card', 'qcm', 'vf', 'trou']) {
+    const its = l.items.filter(it => it.type === type);
+    if (!its.length) continue;
+    h += `<h2>${KIND[type]}s (${its.length})</h2><div class="card">${its.map((it, i) => itemEditor(it, i + 1)).join('')}</div>`;
+  }
+  h += `<div class="sticky">${l.status === 'draft'
+      ? `<button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Jeter</button>`
+      : `<a class="btn" href="#/lesson/${l.id}">Annuler</a>`}
+    <button class="btn pri" onclick="act.saveReview()">✅ Valider la leçon</button></div>`;
+  setView(h);
+}
+function readReview(l) {
+  l.titre = $('#r-titre').value.trim() || l.titre;
+  l.matiere = $('#r-mat').value;
+  l.resume = $('#r-resume').value.split('\n').map(x => x.trim()).filter(Boolean);
+  for (const it of l.items) {
+    const el = $(`[data-id="${it.id}"]`); if (!el) continue;
+    el.querySelectorAll('[data-f]').forEach(inp => {
+      const f = inp.dataset.f;
+      if (f === 'choix') it.choix[+inp.dataset.i] = inp.value.trim();
+      else if (f === 'vrai') it.vrai = inp.value === '1';
+      else it[f] = inp.value.trim();
+    });
+    if (it.type === 'qcm') {
+      const r = el.querySelector('input[type=radio]:checked'); if (r) it.bonne = +r.value;
+      const good = it.choix[it.bonne];
+      it.choix = it.choix.filter(Boolean);
+      it.bonne = Math.max(0, it.choix.indexOf(good));
+    }
+    if (it.type === 'trou') it.phrase = it.phrase.replace(/_{2,}/g, '___');
+  }
+}
+act.delItem = id => { readReview(E); E.items = E.items.filter(it => it.id !== id); renderReview(); };
+act.saveReview = async () => {
+  readReview(E);
+  const bad = E.items.find(it => (it.type === 'trou' && !it.phrase.includes('___')) || (it.type === 'qcm' && it.choix.length < 2));
+  if (bad) { toast('Une question est incomplète (texte à trous sans ___ ou QCM sans choix)'); return; }
+  E.items = E.items.filter(it => (it.recto ?? it.question ?? it.affirmation ?? it.phrase));
+  E.status = 'ready';
+  await Lessons.put(E);
+  const id = E.id; E = null;
+  toast('Leçon enregistrée 👍');
+  go('#/lesson/' + id);
+};
+act.delLesson = async id => {
+  if (!confirm('Supprimer définitivement cette leçon et ses photos ?')) return;
+  await Lessons.del(id); E = null; go('#/');
+};
+
+// --- Leçon
+async function viewLesson(id) {
+  const l = await Lessons.get(id); if (!l) return go('#/');
+  const count = t => l.items.filter(it => it.type === t).length;
+  setView(`<h1>${esc(l.titre)}</h1>
+  <p class="mute">${esc(l.matiere)} · ${starsOf(l)} maîtrise ${Math.round(mastery(l) * 100)} % · créée le ${dateFr(l.createdAt)}</p>
+  <div class="hero">
+    <a class="btn big" href="#/fiche/${l.id}">📖 Fiche résumé</a>
+    <button class="btn big" onclick="act.start('${l.id}','card')" ${count('card') ? '' : 'disabled'}>🃏 Cartes (${count('card')})</button>
+    <button class="btn big" onclick="act.start('${l.id}','quiz')">❓ Quiz (${l.items.length - count('card')})</button>
+    <button class="btn big pri" onclick="act.start('${l.id}','all')">🔁 Tout réviser (${l.items.length})</button>
+  </div>
+  ${l.photos?.length ? `<h2>Photos du cours</h2><div class="thumbs">${l.photos.map(b => { const u = urlOf(b);
+    return `<div class="thumb" onclick="showPhoto('${u}')"><img src="${u}" alt=""></div>`; }).join('')}</div>` : ''}
+  <div class="row" style="margin-top:20px"><a class="btn" href="#/review/${l.id}">✏️ Modifier les questions</a>
+  <button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Supprimer</button></div>`);
+}
+async function viewFiche(id) {
+  const l = await Lessons.get(id); if (!l) return go('#/');
+  setView(`<h1>📖 ${esc(l.titre)} ${speakBtn(l.titre + '. ' + l.resume.join('. '))}</h1>
+  <div class="card"><ul class="resume">${l.resume.map(r => `<li>${esc(r)}</li>`).join('')}</ul></div>
+  <div class="row"><a class="btn" href="#/lesson/${l.id}">← Retour</a><button class="btn pri" onclick="act.start('${l.id}','all')">Je m'entraîne 💪</button></div>`);
+}
+
+// --- Séance de révision
+let S = null;
+function startSession(entries, title, back) {
+  S = { queue: shuffle(entries.map(({ l, it }) => ({ lid: l.id, iid: it.id }))), lessons: new Map(entries.map(({ l }) => [l.id, l])),
+    i: 0, answered: 0, ok: 0, title, back, requeued: new Set(), st: null };
+  go('#/play');
+}
+act.start = async (id, mode) => {
+  const l = await Lessons.get(id);
+  const its = l.items.filter(it => mode === 'all' || (mode === 'card' ? it.type === 'card' : it.type !== 'card'));
+  if (!its.length) return toast('Aucune question de ce type');
+  startSession(its.map(it => ({ l, it })), l.titre, '#/lesson/' + l.id);
+};
+async function viewDaily() {
+  const ls = await Lessons.all();
+  const due = dueEntries(ls).sort((a, b) => (a.it.due || 0) - (b.it.due || 0) || (a.it.box || 0) - (b.it.box || 0)).slice(0, DAILY_MAX);
+  if (!due.length) return setView(`<div class="card center"><div class="big-emoji">🎉</div><h2>Rien à réviser aujourd'hui !</h2>
+    <p class="mute">${ls.some(l => l.status === 'ready') ? 'Tu peux quand même t\'entraîner sur une leçon.' : 'Ajoute d\'abord une leçon en photo.'}</p>
+    <a class="btn pri" href="#/">Accueil</a></div>`);
+  startSession(due, 'Révisions du jour', '#/');
+}
+function current() {
+  const e = S.queue[S.i]; const l = S.lessons.get(e.lid);
+  return { e, l, it: l?.items.find(x => x.id === e.iid) };
+}
+function viewPlay() {
+  if (!S) return go('#/');
+  if (S.i >= S.queue.length) return renderEnd();
+  const { l, it } = current();
+  if (!it) { S.i++; return viewPlay(); }
+  const st = S.st ||= { answered: false, flipped: false, order: it.type === 'qcm' ? shuffle(it.choix.map((_, i) => i)) : null };
+  let b = '';
+  if (it.type === 'card') {
+    b = `<div class="card flash" onclick="act.flip()"><div>${esc(it.recto)}</div>
+      ${st.flipped ? `<div class="verso">${esc(it.verso)}</div>` : '<div class="mute small" style="margin-top:16px">Touche pour voir la réponse</div>'}</div>
+      <div class="row" style="justify-content:center">${speakBtn(st.flipped ? it.verso : it.recto)}</div>
+      ${st.flipped ? `<div class="hero"><button class="btn big bad" onclick="act.card(false)">👎 À revoir</button>
+        <button class="btn big good" onclick="act.card(true)">👍 Je savais</button></div>` : ''}`;
+  }
+  if (it.type === 'qcm') {
+    b = `<div class="q">${esc(it.question)} ${speakBtn(it.question)}</div><div class="choices">${st.order.map(k => {
+      const cls = st.answered ? (k === it.bonne ? ' good' : k === st.pick ? ' bad' : '') : '';
+      return `<button class="btn${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.qcm(${k})">${esc(it.choix[k])}</button>`; }).join('')}</div>`;
+    if (st.answered) b += feedback(st.correct, st.correct ? it.explication : `Bonne réponse : <b>${esc(it.choix[it.bonne])}</b>. ${esc(it.explication)}`, true);
+  }
+  if (it.type === 'vf') {
+    b = `<div class="q">${esc(it.affirmation)} ${speakBtn(it.affirmation)}</div><div class="hero">
+      ${[true, false].map(v => { const cls = st.answered ? (v === it.vrai ? ' good' : v === st.pick ? ' bad' : '') : '';
+        return `<button class="btn big${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.vf(${v})">${v ? '✅ Vrai' : '❌ Faux'}</button>`; }).join('')}</div>`;
+    if (st.answered) b += feedback(st.correct, `C'est ${it.vrai ? 'vrai' : 'faux'}. ${esc(it.correction)}`, true);
+  }
+  if (it.type === 'trou') {
+    const filled = st.answered ? `<span class="blank">${esc(it.reponse)}</span>` : '<span class="blank">?</span>';
+    b = `<div class="q">${esc(it.phrase).replace('___', filled)} ${speakBtn(it.phrase)}</div>`;
+    if (!st.answered) b += `<form onsubmit="act.trou(event)" class="row"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
+        spellcheck="false" placeholder="Le mot manquant" style="flex:1;font-size:22px"><button class="btn pri">Valider</button></form>
+        <button class="btn" style="margin-top:10px" onclick="act.trouGiveUp()">Je ne sais pas</button>`;
+    else b += feedback(st.correct, st.correct
+      ? (st.hint ? `Attention à l'orthographe : <b>${esc(it.reponse)}</b>` : '')
+      : `${st.typed ? `Tu as écrit « ${esc(st.typed)} ». ` : ''}La réponse était <b>${esc(it.reponse)}</b>.`, true)
+      + (!st.correct && st.typed ? `<button class="btn" onclick="act.override()">J'avais bon quand même</button>` : '');
+  }
+  setView(`<div class="play"><div class="row" style="justify-content:space-between"><span class="kind">${KIND[it.type]} · ${esc(S.lessons.size > 1 ? l.titre : S.title)}</span>
+    <span class="mute small">${S.i + 1} / ${S.queue.length}</span></div>
+    <div class="progress"><div style="width:${100 * S.i / S.queue.length}%"></div></div>${b}</div>`);
+  if (it.type === 'trou' && !st.answered) $('#t-in')?.focus();
+}
+function feedback(ok, text, next) {
+  return `<div class="fb ${ok ? 'ok' : 'ko'}"><b>${ok ? '🎉 Bravo !' : '💡 Pas tout à fait.'}</b> ${text || ''}</div>
+    ${next ? `<div class="row" style="justify-content:flex-end"><button class="btn pri" onclick="act.next()" id="next">Suivant →</button></div>` : ''}`;
+}
+function grade(correct) {
+  const { e, l, it } = current();
+  S.st.prev = { box: it.box || 0, due: it.due || 0 };
+  S.answered++; if (correct) S.ok++;
+  it.seen = (it.seen || 0) + 1; if (correct) it.ok = (it.ok || 0) + 1;
+  if (correct) { it.box = Math.min((it.box || 0) + 1, 5); it.due = today() + INTERVALS[it.box]; }
+  else {
+    it.box = 1; it.due = today() + 1;
+    if (!S.requeued.has(it.id)) { S.requeued.add(it.id); S.queue.push(e); }  // la question revient en fin de séance
+  }
+  S.st.answered = true; S.st.correct = correct;
+  Lessons.put(l); bumpStreak();
+}
+act.flip = () => { if (!S.st.flipped) { S.st.flipped = true; viewPlay(); } };
+act.card = ok => { grade(ok); act.next(); };
+act.qcm = k => { if (S.st.answered) return; S.st.pick = k; grade(k === current().it.bonne); viewPlay(); };
+act.vf = v => { if (S.st.answered) return; S.st.pick = v; grade(v === current().it.vrai); viewPlay(); };
+act.trou = ev => {
+  ev.preventDefault();
+  const typed = $('#t-in').value.trim(); if (!typed) return;
+  const { it } = current();
+  const answers = it.reponse.split('/').map(x => x.trim()).filter(Boolean);
+  const ok = answers.some(a => norm(a) === norm(typed));
+  S.st.typed = typed;
+  S.st.hint = ok && !answers.some(a => a.toLowerCase() === typed.toLowerCase());
+  grade(ok); viewPlay();
+};
+act.trouGiveUp = () => { S.st.typed = ''; grade(false); viewPlay(); };
+act.override = () => {
+  const { e, l, it } = current();
+  it.box = Math.min(S.st.prev.box + 1, 5); it.due = today() + INTERVALS[it.box]; it.ok = (it.ok || 0) + 1;
+  if (S.requeued.has(it.id) && S.queue[S.queue.length - 1] === e) { S.queue.pop(); S.requeued.delete(it.id); }
+  S.ok++; S.st.correct = true; S.st.hint = false;
+  Lessons.put(l); viewPlay();
+};
+act.next = () => { S.i++; S.st = null; viewPlay(); };
+function renderEnd() {
+  const pct = S.answered ? Math.round(100 * S.ok / S.answered) : 0;
+  const [emo, msg] = pct >= 90 ? ['🏆', 'Excellent !'] : pct >= 70 ? ['🌟', 'Très bien !'] : pct >= 50 ? ['💪', 'Bien, continue !'] : ['🌱', 'On y retourne demain, ça va rentrer !'];
+  setView(`<div class="play card center"><div class="big-emoji">${emo}</div><h1>${msg}</h1>
+    <p style="font-size:22px">${S.ok} bonne${S.ok > 1 ? 's' : ''} réponse${S.ok > 1 ? 's' : ''} sur ${S.answered}</p>
+    <p class="mute">Les questions ratées reviendront demain.</p>
+    <div class="row" style="justify-content:center"><a class="btn" href="${S.back}">Retour</a><a class="btn pri" href="#/">Accueil</a></div></div>`);
+}
+
+// --- Réglages
+async function viewSettings() {
+  const key = await KV.get('apiKey', ''), model = await KV.get('model', DEFAULT_MODEL);
+  let storage = '';
+  try {
+    const est = await navigator.storage.estimate(), persisted = await navigator.storage.persisted();
+    storage = `${(est.usage / 1048576).toFixed(1)} Mo utilisés sur cet appareil · ${persisted ? 'stockage protégé ✅' : 'stockage non protégé (le navigateur pourrait le vider s\'il manque de place)'}`;
+  } catch {}
+  setView(`<h1>⚙️ Réglages</h1>
+  <div class="card">
+    <h2 style="margin-top:0">Clé Gemini (gratuite)</h2>
+    <ol class="small">
+      <li>Ouvre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> avec un compte Google d'adulte.</li>
+      <li>Clique sur « Create API key » puis copie la clé (elle commence par <code>AIza</code>).</li>
+      <li>Colle-la ici. Elle reste uniquement sur cet appareil.</li>
+    </ol>
+    <label for="s-key">Clé</label>
+    <div class="row"><input type="password" id="s-key" value="${esc(key)}" autocomplete="off" style="flex:1">
+      <button class="btn" onclick="const i=$('#s-key');i.type=i.type==='password'?'text':'password'">👁️</button></div>
+    <label for="s-model">Modèle</label>
+    <select id="s-model"><option>${esc(model)}</option></select>
+    <p id="s-check" class="small mute">« Vérifier la clé » teste la clé et liste les modèles disponibles.</p>
+    <div class="row"><button class="btn" onclick="act.checkKey()">🔍 Vérifier la clé</button><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
+  </div>
+  <p class="small mute">${storage}</p>`);
+}
+act.checkKey = async () => {
+  await KV.set('apiKey', $('#s-key').value.trim());
+  const out = $('#s-check'); out.textContent = 'Vérification…';
+  try {
+    const data = await gemini('/models?pageSize=200');
+    const names = (data.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => m.name.replace(/^models\//, ''))
+      .filter(n => /^gemini/.test(n) && !/(tts|image|embedding|live|audio|robotics|computer|native)/.test(n));
+    if (!names.length) throw new ApiError('Aucun modèle Gemini disponible avec cette clé.');
+    const rank = n => (n === DEFAULT_MODEL ? 0 : /flash/.test(n) && !/lite|preview|exp/.test(n) ? 1 : /flash/.test(n) ? 2 : 3);
+    names.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
+    const cur = $('#s-model').value;
+    $('#s-model').innerHTML = names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    out.textContent = `✅ Clé valide — ${names.length} modèles disponibles. Un modèle « flash » suffit largement.`;
+  } catch (e) { out.textContent = '❌ ' + e.message; }
+};
+act.saveSettings = async () => {
+  const key = $('#s-key').value.trim(), model = $('#s-model').value;
+  await KV.set('apiKey', key);
+  await KV.set('model', model);
+  toast('Réglages enregistrés');
+  go('#/');
+};
+
+// ---------- Routeur ----------
+const routes = { '': viewHome, new: viewNew, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
+async function route() {
+  const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
+  if (name !== 'play') window.speechSynthesis?.cancel();
+  try { await (routes[name] || viewHome)(...args.map(decodeURIComponent)); }
+  catch (e) { console.error(e); setView(`<div class="card"><h2>Oups</h2><p>${esc(e.message)}</p><a class="btn" href="#/">Accueil</a></div>`); }
+}
+function go(h) { if (location.hash === h) route(); else location.hash = h; }
+window.addEventListener('hashchange', route);
+document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && $('#next')) { ev.preventDefault(); act.next(); } });
+
+navigator.storage?.persist?.().catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+renderStreak();
+route();
+</script>
+</body>
+</html>
