@@ -262,24 +262,43 @@ function apiMessage(status, msg) {
   if (status === 403) return 'Clé refusée par Google (API non activée ou clé restreinte).';
   if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
   if (status >= 500) return 'Le service Gemini est surchargé. Réessaie dans une minute.';
+  if (status === 401) return `Google refuse la clé (401). Message de Google : ${msg || 'aucun'}`;
   return `Erreur Gemini ${status}${msg ? ' : ' + msg : ''}`;
 }
+// Trois façons d'envoyer la clé : les clés « AIza » passent partout, les nouvelles clés « AQ. » ne sont pas
+// acceptées de la même façon selon les comptes. On essaie dans l'ordre et on retient celle qui marche.
+const AUTH_MODES = {
+  header: (url, key) => [url, { 'x-goog-api-key': key }],
+  query: (url, key) => [url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(key), {}],
+  bearer: (url, key) => [url, { Authorization: 'Bearer ' + key }],
+};
+const isAuthError = (status, msg) => status === 401 || (status === 400 && /api key|credential|authenticat/i.test(msg)) || (status === 403 && /api key|credential|authenticat|unregistered/i.test(msg));
 async function gemini(path, init) {
-  const key = await KV.get('apiKey', '');
+  const key = (await KV.get('apiKey', '')).replace(/\s+/g, '');
   if (!key) throw new ApiError('Ajoute d\'abord ta clé Gemini dans les réglages ⚙️.');
-  const headers = { 'x-goog-api-key': key, ...(init?.body ? { 'Content-Type': 'application/json' } : {}) };
-  let res;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try { res = await fetch(API + path, { ...init, headers }); }
-    catch { throw new ApiError('Pas de connexion internet.'); }
-    if (res.status < 500) break;
-    await new Promise(r => setTimeout(r, 3000));
+  const saved = await KV.get('authMode', 'header');
+  const modes = [saved, ...Object.keys(AUTH_MODES).filter(m => m !== saved)];
+  let firstErr = null;
+  for (const mode of modes) {
+    const [url, auth] = AUTH_MODES[mode](API + path, key);
+    const headers = { ...auth, ...(init?.body ? { 'Content-Type': 'application/json' } : {}) };
+    let res;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { res = await fetch(url, { ...init, headers }); }
+      catch { throw new ApiError('Pas de connexion internet.'); }
+      if (res.status < 500) break;
+      await new Promise(r => setTimeout(r, 3000));
+    }
+    if (res.ok) {
+      if (mode !== saved) await KV.set('authMode', mode);
+      return res.json();
+    }
+    let msg = '';
+    try { const e = (await res.json()).error || {}; msg = [e.message, ...(e.details || []).map(d => d.reason).filter(Boolean)].filter(Boolean).join(' — '); } catch {}
+    firstErr ||= { status: res.status, msg };
+    if (!isAuthError(res.status, msg)) throw new ApiError(apiMessage(res.status, msg));
   }
-  if (!res.ok) {
-    let msg = ''; try { msg = (await res.json()).error?.message || ''; } catch {}
-    throw new ApiError(apiMessage(res.status, msg));
-  }
-  return res.json();
+  throw new ApiError(apiMessage(firstErr.status, firstErr.msg));
 }
 async function generate(blobs, matiere) {
   const model = (await KV.get('model', DEFAULT_MODEL)).replace(/^models\//, '');

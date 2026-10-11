@@ -1,5 +1,5 @@
 // Garde l'application disponible hors ligne. Les appels à Gemini ne sont jamais mis en cache.
-const CACHE = 'revision6e-v1';
+const CACHE = 'revision6e-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
