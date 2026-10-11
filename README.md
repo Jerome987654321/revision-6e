@@ -5,7 +5,7 @@ prépare une fiche résumé, des cartes, des QCM, des vrai/faux et des textes à
 révise avec la répétition espacée (boîtes de Leitner).
 
 Tout reste sur l'appareil (IndexedDB du navigateur) : leçons, photos, progression, clé.
-Seule la génération passe par internet, directement de l'appareil vers Google.
+Seule la génération passe par internet, directement de l'appareil vers l'IA choisie.
 
 ## Fichiers
 
