@@ -122,7 +122,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -482,7 +482,62 @@ async function viewNew() {
     <label for="n-mat">Matière</label>
     <select id="n-mat" onchange="pendingMat=this.value; savePending()">${opts}</select>
   </div>
-  <div class="sticky"><button class="btn pri big" ${pending.length ? '' : 'disabled'} onclick="act.generate()">✨ Créer les révisions</button></div>`);
+  <div class="card">
+    <h2 style="margin-top:0">🤖 Avec ChatGPT (ton abonnement)</h2>
+    <ol class="small">
+      <li><b>Envoyer à ChatGPT</b> : choisis ChatGPT dans le menu de partage. La consigne est aussi copiée : colle-la dans la conversation si elle n'apparaît pas.</li>
+      <li>Dans ChatGPT, envoie le message, puis copie le bloc de code de la réponse (bouton « Copier » du bloc).</li>
+      <li>Reviens ici : <b>Coller</b>, puis <b>Importer</b>.</li>
+    </ol>
+    <div class="row">
+      <button class="btn" ${pending.length ? '' : 'disabled'} onclick="act.shareChat()">📤 Envoyer à ChatGPT</button>
+      <button class="btn" onclick="act.copyPrompt()">📋 Copier la consigne</button>
+    </div>
+    <details class="small" style="margin-top:10px"><summary>Voir la consigne</summary>
+      <textarea readonly rows="8" style="margin-top:8px">${esc(chatPrompt())}</textarea></details>
+    <label for="n-import">Réponse de ChatGPT</label>
+    <textarea id="n-import" rows="4" placeholder="Colle ici la réponse de ChatGPT" oninput="pendingImport=this.value">${esc(pendingImport)}</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" onclick="act.pasteReply()">📥 Coller</button>
+      <button class="btn pri" onclick="act.importReply()">✅ Importer</button>
+    </div>
+  </div>
+  <div class="sticky"><button class="btn pri big" ${pending.length ? '' : 'disabled'} onclick="act.generate()">✨ Créer avec l'IA des réglages</button></div>`);
+}
+let pendingImport = '';
+const chatPrompt = () => buildPrompt(pendingMat) + JSON_SHAPE
+  + '\nPrésente ce JSON dans un seul bloc de code (```json) pour qu\'il soit facile à copier.';
+const photoFiles = () => pending.map((b, i) => new File([b], `page-${i + 1}.jpg`, { type: 'image/jpeg' }));
+act.copyPrompt = async () => {
+  try { await navigator.clipboard.writeText(chatPrompt()); toast('Consigne copiée ✅'); }
+  catch { toast('Copie impossible : ouvre « Voir la consigne » et copie-la à la main'); }
+};
+act.shareChat = async () => {
+  const text = chatPrompt();
+  navigator.clipboard?.writeText(text).catch(() => {});
+  const files = photoFiles();
+  if (!navigator.canShare?.({ files })) return toast('Consigne copiée. Ouvre ChatGPT, ajoute les photos et colle la consigne.');
+  try { await navigator.share({ files, text }); }
+  catch (e) { if (e.name !== 'AbortError') toast('Partage impossible : ' + e.message); }
+};
+act.pasteReply = async () => {
+  try { pendingImport = await navigator.clipboard.readText(); $('#n-import').value = pendingImport; }
+  catch { toast('Fais un appui long dans la zone de texte, puis « Coller »'); }
+};
+act.importReply = async () => {
+  const text = $('#n-import').value;
+  if (!text.trim()) return toast('Colle d\'abord la réponse de ChatGPT');
+  try { await createLesson(parseJsonText(text), pending.slice()); }
+  catch (e) { toast(e instanceof ApiError ? e.message : 'Réponse illisible : ' + e.message); }
+};
+async function createLesson(r, photos) {
+  if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
+  const l = toLesson(r, photos, pendingMat);
+  if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
+  await Lessons.put(l);
+  pending = []; pendingMat = 'auto'; pendingImport = ''; E = null;
+  await savePending();
+  location.hash = '#/review/' + l.id;
 }
 act.addFiles = async input => {
   const files = [...input.files].slice(0, MAX_PHOTOS - pending.length);
@@ -499,14 +554,7 @@ act.generate = async () => {
   setView(`<div class="card center"><div class="spinner"></div><h2>L'IA lit la leçon…</h2>
     <p class="mute">Cela prend en général 10 à 60 secondes.</p><p class="mute small">Tes photos restent sur l'appareil jusqu'à la création de la leçon.</p></div>`);
   try {
-    const r = await generate(photos, pendingMat);
-    if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
-    const l = toLesson(r, photos, pendingMat);
-    if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
-    await Lessons.put(l);
-    pending = []; pendingMat = 'auto'; E = null;
-    await savePending();
-    location.hash = '#/review/' + l.id;
+    await createLesson(await generate(photos, pendingMat), photos);
   } catch (e) {
     console.error(e);
     setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
