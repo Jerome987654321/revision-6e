@@ -122,6 +122,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
+const APP_VERSION = 3;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -659,7 +660,8 @@ async function viewSettings() {
     <p id="s-check" class="small mute">« Vérifier la clé » teste la clé et liste les modèles disponibles.</p>
     <div class="row"><button class="btn" onclick="act.checkKey()">🔍 Vérifier la clé</button><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
   </div>
-  <p class="small mute">${storage}</p>`);
+  <p class="small mute">${storage}</p>
+  <p class="small mute">Version ${APP_VERSION}</p>`);
 }
 act.checkKey = async () => {
   await KV.set('apiKey', $('#s-key').value.trim());
