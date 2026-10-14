@@ -100,6 +100,22 @@ textarea{resize:vertical}
   padding:10px 18px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30;max-width:90vw}
 #toast.on{opacity:1}
 .big-emoji{font-size:72px;text-align:center;margin:10px 0}
+.check{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:8px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
+.check input{width:24px;height:24px;flex:none;margin:2px 0 0}
+.print-doc{background:#fff;color:#111;padding:24px;border-radius:12px;font-size:16px;line-height:1.5}
+.print-doc h2{font-size:24px} .print-doc h3{font-size:19px} .print-doc h4{font-size:17px}
+.print-doc table{border-collapse:collapse;width:100%;margin:10px 0}
+.print-doc td,.print-doc th{border:1px solid #999;padding:6px 8px;text-align:left}
+.sheet + .sheet{margin-top:32px;border-top:2px dashed #bbb;padding-top:24px}
+.sheet-meta{color:#666;font-size:13px;margin:0}
+@media print{
+  header,.noprint,#toast,.sticky{display:none!important}
+  html,body{background:#fff}
+  main{padding:0;max-width:none}
+  .print-doc{padding:0;border-radius:0}
+  .sheet + .sheet{break-before:page;border:0;margin:0;padding:0}
+  @page{margin:15mm}
+}
 </style>
 </head>
 <body>
@@ -122,7 +138,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -436,9 +452,8 @@ async function viewHome() {
   const ls = (await Lessons.all()).sort((a, b) => b.createdAt - a.createdAt);
   const due = dueEntries(ls).length;
   let h = '';
-  if (!(await keyOf(await KV.get('provider', 'gemini')))) h += `<div class="card notice">👋 Pour commencer, ajoute une clé d'IA gratuite dans les <a href="#/settings">réglages</a>.</div>`;
   await loadPending();
-  if (pending.length) h += `<div class="card notice">📷 ${pending.length} photo${pending.length > 1 ? 's' : ''} en attente : <a href="#/new">reprendre la création de la leçon</a>.</div>`;
+  if (pending.length) h += `<div class="card notice">📷 ${pending.length} photo${pending.length > 1 ? 's' : ''} en attente : <a href="#/new">reprendre la nouvelle leçon</a>.</div>`;
   h += `<div class="hero">
     <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
     <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
@@ -448,29 +463,36 @@ async function viewHome() {
   for (const m of Object.keys(byMat).sort((a, b) => a.localeCompare(b, 'fr'))) {
     h += `<h2 class="mat" style="--h:${hue(m)}">${esc(m)}</h2><div class="grid">`;
     for (const l of byMat[m]) {
-      const draft = l.status === 'draft';
-      h += `<a class="tile" style="--h:${hue(m)}" href="#/${draft ? 'review' : 'lesson'}/${l.id}">
+      const page = { package: 'package', draft: 'review' }[l.status] || 'lesson';
+      const state = { package: '<span class="badge">📦 en attente de ChatGPT</span>', draft: '<span class="badge">à relire</span>' }[l.status]
+        || (l.items.length ? starsOf(l) : '');
+      const what = [l.items.length && `${l.items.length} questions`, l.printMd && '🖨️ fiche'].filter(Boolean);
+      h += `<a class="tile" style="--h:${hue(m)}" href="#/${page}/${l.id}">
         <div class="tile-t">${esc(l.titre)}</div>
-        <div class="tile-m">${draft ? '<span class="badge">à relire</span>' : starsOf(l)} · ${l.items.length} questions · ${dateFr(l.createdAt)}</div></a>`;
+        <div class="tile-m">${[state, ...what, dateFr(l.createdAt)].filter(Boolean).join(' · ')}</div></a>`;
     }
     h += `</div>`;
   }
   setView(h);
 }
 
-// --- Nouvelle leçon
-let pending = [], pendingMat = 'auto', pendingLoaded = false;
-// Les photos prises restent sur l'appareil tant que la leçon n'est pas créée (mise à jour, fermeture, erreur).
-const savePending = () => KV.set('pending', pending.length ? { photos: pending, mat: pendingMat } : null);
+// --- Nouvelle leçon : photos + matière + formats → package pour ChatGPT
+let pending = [], pendingMat = 'auto', pendingTitle = '', pendingFmt = { quiz: true, print: true }, pendingLoaded = false;
+// Les photos prises restent sur l'appareil tant que le package n'est pas créé (mise à jour, fermeture, erreur).
+const savePending = () => KV.set('pending', pending.length || pendingTitle
+  ? { photos: pending, mat: pendingMat, title: pendingTitle, fmt: pendingFmt } : null);
 async function loadPending() {
   if (pendingLoaded) return;
   const s = await KV.get('pending', null);
-  if (s && !pending.length) { pending = s.photos || []; pendingMat = s.mat || 'auto'; }
+  if (s && !pending.length) {
+    pending = s.photos || []; pendingMat = s.mat || 'auto'; pendingTitle = s.title || ''; pendingFmt = s.fmt || pendingFmt;
+  }
   pendingLoaded = true;
 }
+const matOptions = cur => ['auto', ...MATIERES].map(m =>
+  `<option value="${esc(m)}"${m === cur ? ' selected' : ''}>${m === 'auto' ? 'Détecter automatiquement' : esc(m)}</option>`).join('');
 async function viewNew() {
   await loadPending();
-  const opts = ['auto', ...MATIERES].map(m => `<option value="${esc(m)}"${m === pendingMat ? ' selected' : ''}>${m === 'auto' ? 'Détecter automatiquement' : esc(m)}</option>`).join('');
   setView(`<h1>📷 Nouvelle leçon</h1>
   <div class="card">
     <p class="mute small">Une photo par page, bien à plat, avec de la lumière et sans reflet. Jusqu'à ${MAX_PHOTOS} pages.</p>
@@ -480,64 +502,16 @@ async function viewNew() {
     </div>
     <div class="thumbs">${pending.map((b, i) => `<div class="thumb"><img src="${urlOf(b)}" alt="Page ${i + 1}"><button onclick="act.rmPhoto(${i})" aria-label="Retirer">✕</button></div>`).join('')}</div>
     <label for="n-mat">Matière</label>
-    <select id="n-mat" onchange="pendingMat=this.value; savePending()">${opts}</select>
+    <select id="n-mat" onchange="pendingMat=this.value; savePending()">${matOptions(pendingMat)}</select>
+    <label for="n-title">Titre de la leçon <span class="mute small">(facultatif, sinon ChatGPT le trouve)</span></label>
+    <input type="text" id="n-title" value="${esc(pendingTitle)}" placeholder="ex. La cellule, Le présent de l'indicatif…" oninput="pendingTitle=this.value; savePending()">
+    <label>Ce que ChatGPT doit préparer</label>
+    <label class="check"><input type="checkbox" ${pendingFmt.quiz ? 'checked' : ''} onchange="pendingFmt.quiz=this.checked; savePending()">
+      🎮 <span><b>Quiz interactif</b> — joué dans l'app : cartes, QCM, vrai/faux, textes à trous, révisions du jour</span></label>
+    <label class="check"><input type="checkbox" ${pendingFmt.print ? 'checked' : ''} onchange="pendingFmt.print=this.checked; savePending()">
+      🖨️ <span><b>Fiche à imprimer</b> — l'essentiel, des exercices et le corrigé sur une page à part</span></label>
   </div>
-  <div class="card">
-    <h2 style="margin-top:0">🤖 Avec ChatGPT (ton abonnement)</h2>
-    <ol class="small">
-      <li><b>Envoyer à ChatGPT</b> : choisis ChatGPT dans le menu de partage. La consigne est aussi copiée : colle-la dans la conversation si elle n'apparaît pas.</li>
-      <li>Dans ChatGPT, envoie le message, puis copie le bloc de code de la réponse (bouton « Copier » du bloc).</li>
-      <li>Reviens ici : <b>Coller</b>, puis <b>Importer</b>.</li>
-    </ol>
-    <div class="row">
-      <button class="btn" ${pending.length ? '' : 'disabled'} onclick="act.shareChat()">📤 Envoyer à ChatGPT</button>
-      <button class="btn" onclick="act.copyPrompt()">📋 Copier la consigne</button>
-    </div>
-    <details class="small" style="margin-top:10px"><summary>Voir la consigne</summary>
-      <textarea readonly rows="8" style="margin-top:8px">${esc(chatPrompt())}</textarea></details>
-    <label for="n-import">Réponse de ChatGPT</label>
-    <textarea id="n-import" rows="4" placeholder="Colle ici la réponse de ChatGPT" oninput="pendingImport=this.value">${esc(pendingImport)}</textarea>
-    <div class="row" style="margin-top:10px">
-      <button class="btn" onclick="act.pasteReply()">📥 Coller</button>
-      <button class="btn pri" onclick="act.importReply()">✅ Importer</button>
-    </div>
-  </div>
-  <div class="sticky"><button class="btn pri big" ${pending.length ? '' : 'disabled'} onclick="act.generate()">✨ Créer avec l'IA des réglages</button></div>`);
-}
-let pendingImport = '';
-const chatPrompt = () => buildPrompt(pendingMat) + JSON_SHAPE
-  + '\nPrésente ce JSON dans un seul bloc de code (```json) pour qu\'il soit facile à copier.';
-const photoFiles = () => pending.map((b, i) => new File([b], `page-${i + 1}.jpg`, { type: 'image/jpeg' }));
-act.copyPrompt = async () => {
-  try { await navigator.clipboard.writeText(chatPrompt()); toast('Consigne copiée ✅'); }
-  catch { toast('Copie impossible : ouvre « Voir la consigne » et copie-la à la main'); }
-};
-act.shareChat = async () => {
-  const text = chatPrompt();
-  navigator.clipboard?.writeText(text).catch(() => {});
-  const files = photoFiles();
-  if (!navigator.canShare?.({ files })) return toast('Consigne copiée. Ouvre ChatGPT, ajoute les photos et colle la consigne.');
-  try { await navigator.share({ files, text }); }
-  catch (e) { if (e.name !== 'AbortError') toast('Partage impossible : ' + e.message); }
-};
-act.pasteReply = async () => {
-  try { pendingImport = await navigator.clipboard.readText(); $('#n-import').value = pendingImport; }
-  catch { toast('Fais un appui long dans la zone de texte, puis « Coller »'); }
-};
-act.importReply = async () => {
-  const text = $('#n-import').value;
-  if (!text.trim()) return toast('Colle d\'abord la réponse de ChatGPT');
-  try { await createLesson(parseJsonText(text), pending.slice()); }
-  catch (e) { toast(e instanceof ApiError ? e.message : 'Réponse illisible : ' + e.message); }
-};
-async function createLesson(r, photos) {
-  if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
-  const l = toLesson(r, photos, pendingMat);
-  if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
-  await Lessons.put(l);
-  pending = []; pendingMat = 'auto'; pendingImport = ''; E = null;
-  await savePending();
-  location.hash = '#/review/' + l.id;
+  <div class="sticky"><button class="btn pri big" ${pending.length && (pendingFmt.quiz || pendingFmt.print) ? '' : 'disabled'} onclick="act.makePackage()">📦 Préparer le package</button></div>`);
 }
 act.addFiles = async input => {
   const files = [...input.files].slice(0, MAX_PHOTOS - pending.length);
@@ -549,19 +523,224 @@ act.addFiles = async input => {
   viewNew();
 };
 act.rmPhoto = async i => { pending.splice(i, 1); await savePending(); viewNew(); };
-act.generate = async () => {
-  const photos = pending.slice();
+act.makePackage = async () => {
+  const l = { id: uid(), createdAt: Date.now(), status: 'package', matiere: pendingMat === 'auto' ? 'À classer' : pendingMat,
+    matiereAuto: pendingMat === 'auto', titre: pendingTitle.trim() || `Leçon du ${dateFr(Date.now())}`, titreAuto: !pendingTitle.trim(),
+    format: { ...pendingFmt }, photos: pending.slice(), resume: [], items: [], printMd: '', files: [] };
+  await Lessons.put(l);
+  pending = []; pendingMat = 'auto'; pendingTitle = ''; pendingFmt = { quiz: true, print: true };
+  await savePending();
+  go('#/package/' + l.id);
+};
+
+// --- Package : consigne + photos à donner à ChatGPT, puis import de sa réponse
+function packagePrompt(l) {
+  const mat = l.matiereAuto ? `à identifier parmi : ${MATIERES.join(', ')}` : l.matiere;
+  const blocks = [];
+  if (l.format.quiz) blocks.push(`BLOC « QUIZ » — un bloc de code \`\`\`json contenant exactement cet objet :
+{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"..."}]}
+- Il sera joué dans une application de révision : 20 à 35 éléments au total.
+- Choisis la répartition la plus efficace pour CETTE leçon et CETTE matière (par ex. beaucoup de cartes pour du vocabulaire ou des dates, des QCM pour les notions, des textes à trous pour les définitions et les règles, des calculs en QCM pour les maths). Un type peut rester vide s'il ne convient pas.
+- resume : 4 à 8 points essentiels, une phrase chacun.
+- flashcards : recto = question courte, verso = réponse courte.
+- qcm : exactement 4 choix plausibles, un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase.
+- vrai_faux : environ la moitié fausses ; correction = la phrase juste.
+- trous : UN mot-clé remplacé par ___ (trois tirets bas) ; reponse = le mot manquant (1 à 3 mots).
+- Si les photos sont illisibles : "lisible": false et des listes vides.`);
+  if (l.format.print) blocks.push(`BLOC « FICHE » — un bloc de code \`\`\`markdown contenant une fiche de révision à imprimer (format A4, noir et blanc) :
+- # titre de la leçon, puis ## L'essentiel à retenir (5 à 8 points courts).
+- ## Exercices : 5 à 8 exercices variés et adaptés à la matière (questions de cours, QCM à cocher avec ☐, textes à trous, relier par une flèche, vrai/faux, frise ou dates en histoire, vocabulaire en langues, calculs en maths), du plus facile au plus difficile, numérotés, avec des lignes ________ pour écrire les réponses.
+- Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé avec toutes les réponses.
+- Uniquement du Markdown simple : titres, listes, gras, tableaux. Pas d'image ni de HTML.`);
+  return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
+Les photos jointes sont les pages d'une leçon (cahier, manuel ou fiche), dans l'ordre.
+Matière : ${mat}.${l.titreAuto ? '' : `\nTitre de la leçon : ${l.titre}.`}
+
+Règles :
+- Utilise UNIQUEMENT le contenu des photos. N'ajoute aucune notion qui n'y figure pas.
+- Français, phrases courtes et simples, vocabulaire d'un élève de 6e. Pour une langue étrangère : consignes en français, mots et phrases à apprendre dans la langue étudiée.
+- Recopie fidèlement l'orthographe des noms propres, dates, formules et mots de vocabulaire.
+- Couvre toute la leçon, sans répéter la même notion sous la même forme.
+
+Réponds UNIQUEMENT avec ${blocks.length > 1 ? 'les deux blocs de code suivants, dans cet ordre' : 'le bloc de code suivant'}, sans texte avant ni après :
+
+${blocks.join('\n\n')}`;
+}
+const pkgFiles = l => l.photos.map((b, i) => new File([b], `${slug(l.titre)}-page-${i + 1}.jpg`, { type: 'image/jpeg' }));
+const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'lecon';
+async function viewPackage(id) {
+  const l = await Lessons.get(id); if (!l) return go('#/');
+  const missing = [l.format.quiz && !l.items.length && 'le quiz', l.format.print && !l.printMd && 'la fiche'].filter(Boolean);
+  setView(`<h1>📦 ${esc(l.titre)}</h1>
+  <div class="card">
+    <div class="row">
+      <div style="flex:1;min-width:200px"><label for="p-mat" style="margin-top:0">Matière</label>
+        <select id="p-mat" onchange="act.pkgMeta('${l.id}')">${matOptions(l.matiereAuto ? 'auto' : l.matiere)}</select></div>
+      <div style="flex:2;min-width:200px"><label for="p-title" style="margin-top:0">Titre</label>
+        <input type="text" id="p-title" value="${esc(l.titreAuto ? '' : l.titre)}" placeholder="laisser ChatGPT le trouver" onchange="act.pkgMeta('${l.id}')"></div>
+    </div>
+    <p class="small mute">${l.photos.length} photo${l.photos.length > 1 ? 's' : ''} · ${[l.format.quiz && '🎮 quiz interactif', l.format.print && '🖨️ fiche à imprimer'].filter(Boolean).join(' + ')}</p>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">1. Envoyer le package à ChatGPT</h2>
+    <p class="small">Le package = les photos + la consigne. Choisis <b>ChatGPT</b> dans le menu de partage. La consigne est aussi copiée : si elle n'apparaît pas dans le message, appui long → <b>Coller</b>. Une nouvelle conversation par leçon.</p>
+    <div class="row">
+      <button class="btn pri" onclick="act.sharePkg('${l.id}')">📤 Envoyer à ChatGPT</button>
+      <button class="btn" onclick="act.copyPkg('${l.id}')">📋 Copier la consigne</button>
+      <button class="btn" onclick="act.downloadPkg('${l.id}')">⬇️ Télécharger le package</button>
+    </div>
+    <details class="small" style="margin-top:10px"><summary>Voir la consigne</summary>
+      <textarea readonly rows="10" style="margin-top:8px">${esc(packagePrompt(l))}</textarea></details>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">2. Rapporter la réponse de ChatGPT</h2>
+    <p class="small">Dans ChatGPT, touche l'icône <b>Copier</b> sous sa réponse (toute la réponse d'un coup), puis reviens ici.${missing.length ? ` Il manque encore : <b>${missing.join(' et ')}</b>.` : ''}</p>
+    <textarea id="p-import" rows="5" placeholder="Colle ici la réponse de ChatGPT"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" onclick="act.pasteInto('#p-import')">📥 Coller</button>
+      <button class="btn pri" onclick="act.importPkg('${l.id}')">✅ Importer</button>
+      <label class="btn filebtn">📎 Joindre un fichier<input type="file" onchange="act.attach('${l.id}', this)"></label>
+    </div>
+    <p class="small mute">« Joindre un fichier » : un PDF ou une image que ChatGPT t'a donné, gardé avec la leçon.</p>
+  </div>
+  ${await keyOf(await KV.get('provider', 'gemini')) && l.format.quiz ? `<p class="small mute">Ou, sans ChatGPT : <button class="btn" onclick="act.generatePkg('${l.id}')">✨ Quiz avec l'IA des réglages</button></p>` : ''}
+  <div class="row" style="margin-top:12px">${l.items.length || l.printMd || l.files.length ? `<a class="btn" href="#/lesson/${l.id}">Voir la leçon →</a>` : ''}
+    <button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Supprimer</button></div>`);
+}
+act.pkgMeta = async id => {
+  const l = await Lessons.get(id);
+  const m = $('#p-mat').value, t = $('#p-title').value.trim();
+  l.matiereAuto = m === 'auto'; l.matiere = m === 'auto' ? 'À classer' : m;
+  l.titreAuto = !t; l.titre = t || l.titre;
+  await Lessons.put(l); toast('Enregistré');
+};
+act.copyPkg = async id => {
+  const l = await Lessons.get(id);
+  try { await navigator.clipboard.writeText(packagePrompt(l)); toast('Consigne copiée ✅'); }
+  catch { toast('Copie impossible : ouvre « Voir la consigne » et copie-la à la main'); }
+};
+act.sharePkg = async id => {
+  const l = await Lessons.get(id), text = packagePrompt(l), files = pkgFiles(l);
+  navigator.clipboard?.writeText(text).catch(() => {});
+  if (!navigator.canShare?.({ files })) return toast('Partage indisponible : consigne copiée, ajoute les photos dans ChatGPT (ou « Télécharger le package »).');
+  try { await navigator.share({ files, text }); }
+  catch (e) { if (e.name !== 'AbortError') toast('Partage impossible : ' + e.message); }
+};
+act.downloadPkg = async id => {
+  const l = await Lessons.get(id);
+  const save = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+  save(new Blob([packagePrompt(l)], { type: 'text/plain;charset=utf-8' }), `${slug(l.titre)}-consigne.txt`);
+  pkgFiles(l).forEach((f, i) => setTimeout(() => save(f, f.name), 400 * (i + 1)));
+  toast('Package téléchargé : la consigne + les photos');
+};
+act.pasteInto = async sel => {
+  try { $(sel).value = await navigator.clipboard.readText(); }
+  catch { toast('Fais un appui long dans la zone de texte, puis « Coller »'); }
+};
+// Réponse de ChatGPT : un bloc ```json (quiz) et/ou un bloc ```markdown (fiche), ou le contenu d'un seul bloc.
+function splitReply(text) {
+  const out = { quiz: null, md: '' };
+  const blocks = [...String(text).matchAll(/```([\w-]*)[^\n]*\n([\s\S]*?)```/g)].map(m => ({ lang: m[1].toLowerCase(), body: m[2].trim() }));
+  if (!blocks.length) blocks.push({ lang: '', body: String(text).trim() });
+  for (const b of blocks) {
+    if (b.lang === 'json' || (!b.lang && /^\{[\s\S]*\}$/.test(b.body))) { try { out.quiz = parseJsonText(b.body); } catch {} }
+    else if (b.body) out.md = b.body;
+  }
+  return out;
+}
+function applyQuiz(l, r) {
+  const t = toLesson(r, [], l.matiereAuto ? 'auto' : l.matiere);
+  l.items = t.items; l.resume = t.resume;
+  if (l.matiereAuto) { l.matiere = t.matiere; l.matiereAuto = false; }
+  if (l.titreAuto && t.titre !== 'Leçon sans titre') { l.titre = t.titre; l.titreAuto = false; }
+}
+act.importPkg = async id => {
+  const l = await Lessons.get(id), text = $('#p-import').value;
+  if (!text.trim()) return toast('Colle d\'abord la réponse de ChatGPT');
+  const { quiz, md } = splitReply(text);
+  if (!quiz && !md) return toast('Je ne trouve ni quiz ni fiche dans ce texte');
+  if (quiz?.lisible === false) return toast('ChatGPT n\'a pas pu lire les photos : reprends-les plus nettement');
+  if (quiz) applyQuiz(l, quiz);
+  if (md) {
+    l.printMd = md;
+    if (l.titreAuto) { const h = md.match(/^#\s+(.+)$/m); if (h) { l.titre = h[1].trim(); l.titreAuto = false; } }
+  }
+  if (quiz && !l.items.length) return toast('Le quiz est vide ou mal formé : redemande-le à ChatGPT');
+  l.status = quiz ? 'draft' : (l.status === 'package' ? 'ready' : l.status);
+  await Lessons.put(l); E = null;
+  toast([quiz && `Quiz importé (${l.items.length} questions)`, md && 'Fiche importée'].filter(Boolean).join(' · ') + ' ✅');
+  go(quiz ? '#/review/' + l.id : '#/lesson/' + l.id);
+};
+act.attach = async (id, input) => {
+  const f = input.files[0]; if (!f) return;
+  const l = await Lessons.get(id);
+  l.files = [...(l.files || []), { name: f.name, type: f.type || 'application/octet-stream', blob: f }];
+  if (l.status === 'package') l.status = 'ready';
+  await Lessons.put(l); toast('Fichier gardé avec la leçon ✅'); viewPackage(id);
+};
+act.generatePkg = async id => {
+  const l = await Lessons.get(id);
   setView(`<div class="card center"><div class="spinner"></div><h2>L'IA lit la leçon…</h2>
-    <p class="mute">Cela prend en général 10 à 60 secondes.</p><p class="mute small">Tes photos restent sur l'appareil jusqu'à la création de la leçon.</p></div>`);
+    <p class="mute">Cela prend en général 10 à 60 secondes.</p></div>`);
   try {
-    await createLesson(await generate(photos, pendingMat), photos);
+    const r = await generate(l.photos, l.matiereAuto ? 'auto' : l.matiere);
+    if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
+    applyQuiz(l, r);
+    if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
+    l.status = 'draft'; await Lessons.put(l); E = null;
+    go('#/review/' + l.id);
   } catch (e) {
     console.error(e);
     setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
-      <div class="row"><button class="btn pri" onclick="act.generate()">Réessayer</button><a class="btn" href="#/new">Modifier les photos</a>
+      <div class="row"><button class="btn pri" onclick="act.generatePkg('${l.id}')">Réessayer</button><a class="btn" href="#/package/${l.id}">Revenir au package</a>
       <a class="btn" href="#/settings">Réglages</a></div></div>`);
   }
 };
+
+// --- Fiche à imprimer
+function mdToHtml(md) {
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<i>$2</i>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  const lines = md.replace(/\r/g, '').split('\n'); let h = '', list = null, para = [];
+  const flush = () => { if (para.length) { h += `<p>${para.map(inline).join('<br>')}</p>`; para = []; } if (list) { h += `</${list}>`; list = null; } };
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    let m;
+    if (!ln.trim()) { flush(); continue; }
+    if ((m = ln.match(/^(#{1,4})\s+(.*)$/))) { flush(); const n = Math.min(m[1].length + 1, 4); h += `<h${n}>${inline(m[2])}</h${n}>`; continue; }
+    if (/^\s*(-{3,}|\*{3,})\s*$/.test(ln)) { flush(); h += '<hr>'; continue; }
+    if (/^\s*\|.*\|\s*$/.test(ln)) {
+      flush(); const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++]);
+      i--;
+      const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      const body = rows.filter(r => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      h += '<table>' + body.map((r, k) => `<tr>${cells(r).map(c => k === 0 && rows.length > body.length ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('') + '</table>';
+      continue;
+    }
+    if ((m = ln.match(/^\s*(?:[-*+]|(\d+)[.)])\s+(.*)$/))) {
+      const kind = m[1] ? 'ol' : 'ul';
+      if (para.length) flush();
+      if (list !== kind) { if (list) h += `</${list}>`; h += `<${kind}>`; list = kind; }
+      const box = /^\[[ x]\]\s*/i.test(m[2]);
+      h += `<li${box ? ' style="list-style:none"' : ''}>${inline(m[2].replace(/^\[ \]\s*/, '☐ ').replace(/^\[x\]\s*/i, '☑ '))}</li>`;
+      continue;
+    }
+    if (list) { h += `</${list}>`; list = null; }
+    para.push(ln.trim());
+  }
+  flush();
+  return h;
+}
+async function viewPrint(id) {
+  const l = await Lessons.get(id); if (!l) return go('#/');
+  if (!l.printMd) return go('#/lesson/' + id);
+  const pages = l.printMd.split(/<!--\s*saut de page\s*-->/i).map(p => `<section class="sheet">${mdToHtml(p)}</section>`).join('');
+  setView(`<div class="row noprint" style="margin-bottom:12px"><a class="btn" href="#/lesson/${l.id}">← Retour</a>
+    <button class="btn pri" onclick="window.print()">🖨️ Imprimer</button></div>
+  <div class="print-doc"><p class="sheet-meta">${esc(l.matiere)} · Révisions 6e</p>${pages}</div>`);
+}
 
 // --- Relecture / modification
 let E = null;
@@ -652,17 +831,22 @@ act.delLesson = async id => {
 async function viewLesson(id) {
   const l = await Lessons.get(id); if (!l) return go('#/');
   const count = t => l.items.filter(it => it.type === t).length;
+  const files = l.files || [];
   setView(`<h1>${esc(l.titre)}</h1>
-  <p class="mute">${esc(l.matiere)} · ${starsOf(l)} maîtrise ${Math.round(mastery(l) * 100)} % · créée le ${dateFr(l.createdAt)}</p>
-  <div class="hero">
+  <p class="mute">${esc(l.matiere)}${l.items.length ? ` · ${starsOf(l)} maîtrise ${Math.round(mastery(l) * 100)} %` : ''} · créée le ${dateFr(l.createdAt)}</p>
+  ${l.items.length ? `<div class="hero">
     <a class="btn big" href="#/fiche/${l.id}">📖 Fiche résumé</a>
     <button class="btn big" onclick="act.start('${l.id}','card')" ${count('card') ? '' : 'disabled'}>🃏 Cartes (${count('card')})</button>
     <button class="btn big" onclick="act.start('${l.id}','quiz')">❓ Quiz (${l.items.length - count('card')})</button>
     <button class="btn big pri" onclick="act.start('${l.id}','all')">🔁 Tout réviser (${l.items.length})</button>
-  </div>
+  </div>` : ''}
+  ${l.printMd ? `<div class="hero"><a class="btn big" href="#/print/${l.id}">🖨️ Fiche à imprimer</a></div>` : ''}
+  ${files.length ? `<h2>Fichiers de ChatGPT</h2><div class="row">${files.map(f =>
+    `<a class="btn" href="${urlOf(f.blob)}" target="_blank" rel="noopener" download="${esc(f.name)}">📎 ${esc(f.name)}</a>`).join('')}</div>` : ''}
   ${l.photos?.length ? `<h2>Photos du cours</h2><div class="thumbs">${l.photos.map(b => { const u = urlOf(b);
     return `<div class="thumb" onclick="showPhoto('${u}')"><img src="${u}" alt=""></div>`; }).join('')}</div>` : ''}
-  <div class="row" style="margin-top:20px"><a class="btn" href="#/review/${l.id}">✏️ Modifier les questions</a>
+  <div class="row" style="margin-top:20px"><a class="btn" href="#/package/${l.id}">📦 Package ChatGPT</a>
+  ${l.items.length ? `<a class="btn" href="#/review/${l.id}">✏️ Modifier les questions</a>` : ''}
   <button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Supprimer</button></div>`);
 }
 async function viewFiche(id) {
@@ -870,7 +1054,7 @@ act.saveSettings = async () => {
 };
 
 // ---------- Routeur ----------
-const routes = { '': viewHome, new: viewNew, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
+const routes = { '': viewHome, new: viewNew, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
 async function route() {
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   if (name !== 'play') window.speechSynthesis?.cancel();
