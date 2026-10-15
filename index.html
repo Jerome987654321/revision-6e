@@ -144,7 +144,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -1138,8 +1138,22 @@ document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && $('#next'
 
 navigator.storage?.persist?.().catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Mise à jour : l'app installée est reprise telle quelle quand on la rouvre (pas de rechargement).
+// À l'ouverture et à chaque retour au premier plan, on compare avec la version en ligne et on recharge.
+async function checkUpdate() {
+  try {
+    const text = await (await fetch('./index.html?check=' + Date.now(), { cache: 'no-store' })).text();
+    const v = +(text.match(/const APP_VERSION = (\d+);/) || [])[1];
+    if (!(v > APP_VERSION)) return;
+    (await navigator.serviceWorker?.getRegistration())?.update().catch(() => {});
+    if (location.hash.startsWith('#/play')) toast(`Nouvelle version ${v} : elle s'installera à la fin de la séance`);
+    else location.reload();
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 renderStreak();
 route();
+checkUpdate();
 </script>
 </body>
 </html>
