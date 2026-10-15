@@ -67,6 +67,11 @@ textarea{resize:vertical}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb button{position:absolute;top:6px;right:6px;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:18px}
 .filebtn{position:relative;overflow:hidden}
+.pick{cursor:pointer}
+.pick.on{outline:4px solid var(--pri);outline-offset:-4px}
+.pick .tick{display:none;position:absolute;top:6px;right:6px;width:34px;height:34px;border-radius:50%;background:var(--pri);color:var(--pri-ink);
+  align-items:center;justify-content:center;font-weight:800}
+.pick.on .tick{display:flex}
 .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .spinner{width:56px;height:56px;border-radius:50%;border:6px solid var(--soft);border-top-color:var(--pri);animation:spin 1s linear infinite;margin:24px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -139,7 +144,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -500,6 +505,7 @@ async function viewNew() {
     <div class="row">
       <label class="btn pri filebtn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" onchange="act.addFiles(this)"></label>
       <label class="btn filebtn">🖼️ Choisir des images<input type="file" accept="image/*" multiple onchange="act.addFiles(this)"></label>
+      <a class="btn" href="#/photos">🗂️ Photos déjà prises</a>
     </div>
     <div class="thumbs">${pending.map((b, i) => `<div class="thumb"><img src="${urlOf(b)}" alt="Page ${i + 1}"><button onclick="act.rmPhoto(${i})" aria-label="Retirer">✕</button></div>`).join('')}</div>
     <label for="n-mat">Matière</label>
@@ -532,6 +538,34 @@ act.makePackage = async () => {
   pending = []; pendingMat = 'auto'; pendingTitle = ''; pendingFmt = { quiz: true, print: true };
   await savePending();
   go('#/package/' + l.id);
+};
+
+// --- Photos déjà prises : celles que l'app garde avec chaque leçon (les photos prises depuis l'app ne vont pas dans la galerie)
+async function viewPhotos() {
+  await loadPending();
+  const ls = (await Lessons.all()).filter(l => l.photos?.length).sort((a, b) => b.createdAt - a.createdAt);
+  let h = `<h1>🗂️ Photos déjà prises</h1>
+  <p class="small mute">Touche les photos à reprendre pour la nouvelle leçon (${pending.length} déjà ajoutée${pending.length > 1 ? 's' : ''}, ${MAX_PHOTOS} au maximum).</p>`;
+  if (!ls.length) h += `<p class="mute center">Aucune photo pour l'instant.</p>`;
+  for (const l of ls) h += `<h2>${esc(l.titre)} <span class="mute small">· ${esc(l.matiere)} · ${dateFr(l.createdAt)}</span></h2>
+    <div class="thumbs">${l.photos.map((b, i) => `<div class="thumb pick" data-k="${l.id}|${i}" onclick="this.classList.toggle('on')">
+      <img src="${urlOf(b)}" alt="Page ${i + 1}"><span class="tick">✓</span></div>`).join('')}</div>`;
+  h += `<div class="sticky"><a class="btn" href="#/new">Annuler</a>
+    <button class="btn pri" onclick="act.addPicked()">➕ Ajouter à la leçon</button></div>`;
+  setView(h);
+}
+act.addPicked = async () => {
+  const picked = [...document.querySelectorAll('.pick.on')].map(e => e.dataset.k);
+  if (!picked.length) return toast('Touche les photos à ajouter');
+  const byId = new Map((await Lessons.all()).map(l => [l.id, l]));
+  for (const k of picked) {
+    if (pending.length >= MAX_PHOTOS) { toast(`Maximum ${MAX_PHOTOS} pages par leçon`); break; }
+    const [id, i] = k.split('|');
+    const b = byId.get(id)?.photos?.[+i];
+    if (b) pending.push(b);
+  }
+  await savePending();
+  go('#/new');
 };
 
 // --- Package : consigne + photos à donner à ChatGPT, puis import de sa réponse
@@ -1091,7 +1125,7 @@ act.saveSettings = async () => {
 };
 
 // ---------- Routeur ----------
-const routes = { '': viewHome, new: viewNew, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
+const routes = { '': viewHome, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
 async function route() {
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   if (name !== 'play') window.speechSynthesis?.cancel();
