@@ -1,6 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="0" fill="#3b6fe0"/>
-  <rect x="136" y="150" width="240" height="250" rx="22" fill="#ffffff"/>
-  <rect x="166" y="120" width="240" height="250" rx="22" fill="#ffd166"/>
-  <path d="M236 245 l38 38 l72 -82" fill="none" stroke="#1d2433" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Fond plein (icône « maskable ») ; le dessin reste dans la zone sûre centrale -->
+  <rect width="512" height="512" fill="#4f7cf7"/>
+  <circle cx="256" cy="256" r="218" fill="#6b95f5"/>
+  <g transform="translate(256 262) scale(.84) translate(-256 -262)">
+    <!-- oreilles -->
+    <circle cx="134" cy="232" r="28" fill="#f4b88f"/>
+    <circle cx="378" cy="232" r="28" fill="#f4b88f"/>
+    <!-- visage -->
+    <circle cx="256" cy="218" r="124" fill="#ffd8b8"/>
+    <!-- cheveux -->
+    <path d="M136 206 C128 120 186 74 256 74 C330 74 392 116 378 206
+             C366 176 350 160 330 152 C322 172 300 180 282 168
+             C270 186 240 188 226 170 C208 186 180 184 170 160
+             C156 172 144 188 136 206 Z" fill="#6b4226"/>
+    <path d="M250 76 C262 52 288 46 300 58 C282 60 270 68 262 82 Z" fill="#6b4226"/>
+    <!-- sourcils -->
+    <path d="M190 196 Q212 184 232 194" stroke="#6b4226" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M280 194 Q300 184 322 196" stroke="#6b4226" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <!-- yeux qui regardent le livre -->
+    <ellipse cx="212" cy="232" rx="23" ry="27" fill="#fff"/>
+    <ellipse cx="300" cy="232" rx="23" ry="27" fill="#fff"/>
+    <circle cx="214" cy="242" r="13" fill="#1d2433"/>
+    <circle cx="298" cy="242" r="13" fill="#1d2433"/>
+    <circle cx="219" cy="237" r="4.5" fill="#fff"/>
+    <circle cx="303" cy="237" r="4.5" fill="#fff"/>
+    <!-- joues et sourire -->
+    <circle cx="180" cy="276" r="17" fill="#ff9aa2" opacity=".55"/>
+    <circle cx="332" cy="276" r="17" fill="#ff9aa2" opacity=".55"/>
+    <path d="M232 282 Q256 304 280 282" stroke="#a0522d" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <!-- livre ouvert -->
+    <path d="M256 330 L256 458 Q186 424 106 452 L106 330 Q186 304 256 330 Z" fill="#ff8a3d"/>
+    <path d="M256 330 L256 458 Q326 424 406 452 L406 330 Q326 304 256 330 Z" fill="#ff8a3d"/>
+    <path d="M252 322 L252 444 Q186 412 118 438 L118 324 Q186 298 252 322 Z" fill="#fffdf6"/>
+    <path d="M260 322 L260 444 Q326 412 394 438 L394 324 Q326 298 260 322 Z" fill="#fffdf6"/>
+    <g stroke="#b8c4dc" stroke-width="6" stroke-linecap="round" fill="none">
+      <path d="M138 350 Q186 334 234 350"/><path d="M138 376 Q186 360 234 376"/><path d="M138 402 Q186 386 220 398"/>
+      <path d="M278 350 Q326 334 374 350"/><path d="M278 376 Q326 360 374 376"/><path d="M292 402 Q326 386 374 402"/>
+    </g>
+    <!-- mains -->
+    <circle cx="112" cy="392" r="22" fill="#ffd8b8"/>
+    <circle cx="400" cy="392" r="22" fill="#ffd8b8"/>
+    <!-- étoile -->
+    <path d="M412 104 l9 19 21 3 -15 15 4 21 -19 -10 -19 10 4 -21 -15 -15 21 -3 Z" fill="#ffd166"/>
+  </g>
 </svg>
