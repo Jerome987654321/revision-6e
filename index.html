@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#3b6fe0">
+<meta name="theme-color" content="#3b6fe0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c212b" media="(prefers-color-scheme: dark)">
 <title>Révisions 6e</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -167,7 +168,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
