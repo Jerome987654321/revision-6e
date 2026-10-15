@@ -86,6 +86,7 @@ textarea{resize:vertical}
 .choices .btn{justify-content:flex-start;text-align:left;min-height:62px;font-weight:550}
 .btn.good{background:var(--ok-bg);border-color:var(--ok);color:var(--ink)}
 .btn.bad{background:var(--ko-bg);border-color:var(--ko);color:var(--ink)}
+.btn.sel{background:var(--soft);border:2px solid var(--pri)}
 .flash{min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
   font-size:26px;font-weight:650;cursor:pointer;border:2px dashed var(--line)}
 .flash .verso{color:var(--pri);margin-top:16px}
@@ -138,7 +139,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -550,6 +551,7 @@ function packagePrompt(l) {
   if (l.format.print) blocks.push(`BLOC « FICHE » — un bloc de code \`\`\`markdown contenant une fiche de révision à imprimer (format A4, noir et blanc) :
 - # titre de la leçon, puis ## L'essentiel à retenir (5 à 8 points courts).
 - ## Exercices : 5 à 8 exercices variés et adaptés à la matière (questions de cours, QCM à cocher avec ☐, textes à trous, relier par une flèche, vrai/faux, frise ou dates en histoire, vocabulaire en langues, calculs en maths), du plus facile au plus difficile, numérotés, avec des lignes ________ pour écrire les réponses.
+- Dans les exercices, ne donne AUCUNE réponse (ni entre parenthèses, ni en exemple, ni en gras) : elles vont toutes dans le corrigé.
 - Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé avec toutes les réponses.
 - Uniquement du Markdown simple : titres, listes, gras, tableaux. Pas d'image ni de HTML.`);
   return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
@@ -733,13 +735,22 @@ function mdToHtml(md) {
   flush();
   return h;
 }
+let showCorr = false;
 async function viewPrint(id) {
   const l = await Lessons.get(id); if (!l) return go('#/');
   if (!l.printMd) return go('#/lesson/' + id);
-  const pages = l.printMd.split(/<!--\s*saut de page\s*-->/i).map(p => `<section class="sheet">${mdToHtml(p)}</section>`).join('');
+  // Exercices d'un côté, corrigé de l'autre : au saut de page, ou à défaut au titre « Corrigé ».
+  let parts = l.printMd.split(/<!--\s*saut de page\s*-->/i);
+  if (parts.length === 1) {
+    const k = l.printMd.search(/^#{1,4}\s*corrig/im);
+    if (k > 0) parts = [l.printMd.slice(0, k), l.printMd.slice(k)];
+  }
+  const [exo, ...corr] = parts;
+  const sheets = [exo, ...(showCorr ? corr : [])].map(p => `<section class="sheet">${mdToHtml(p)}</section>`).join('');
   setView(`<div class="row noprint" style="margin-bottom:12px"><a class="btn" href="#/lesson/${l.id}">← Retour</a>
-    <button class="btn pri" onclick="window.print()">🖨️ Imprimer</button></div>
-  <div class="print-doc"><p class="sheet-meta">${esc(l.matiere)} · Révisions 6e</p>${pages}</div>`);
+    ${corr.length ? `<button class="btn" onclick="showCorr=!showCorr; viewPrint('${l.id}')">${showCorr ? '🙈 Masquer le corrigé' : '💡 Afficher le corrigé'}</button>` : ''}
+    <button class="btn pri" onclick="window.print()">🖨️ Imprimer ${corr.length ? (showCorr ? '(avec corrigé)' : '(sans corrigé)') : ''}</button></div>
+  <div class="print-doc"><p class="sheet-meta">${esc(l.matiere)} · Révisions 6e</p>${sheets}</div>`);
 }
 
 // --- Relecture / modification
@@ -771,7 +782,9 @@ function renderReview() {
   const l = E;
   const mats = MATIERES.includes(l.matiere) ? MATIERES : [l.matiere, ...MATIERES];
   let h = `<h1>✏️ Relire la leçon</h1>
-  <p class="mute small">Vérifie ce que Gemini a préparé : corrige ou supprime ce qui est faux avant de réviser.</p>
+  <div class="card notice">👀 <b>Espace parent : les réponses sont visibles ici.</b> Vérifie, corrige ou supprime ce qui est faux, puis
+    « Valider la leçon ». L'enfant s'entraîne ensuite avec <b>Quiz</b> ou <b>Tout réviser</b> : il y écrit ou choisit sa réponse, la valide,
+    ou demande à voir la réponse.</div>
   <div class="card">
     <label for="r-titre">Titre</label><input type="text" id="r-titre" value="${esc(l.titre)}">
     <label for="r-mat">Matière</label><select id="r-mat">${mats.map(m => `<option${m === l.matiere ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select>
@@ -846,7 +859,7 @@ async function viewLesson(id) {
   ${l.photos?.length ? `<h2>Photos du cours</h2><div class="thumbs">${l.photos.map(b => { const u = urlOf(b);
     return `<div class="thumb" onclick="showPhoto('${u}')"><img src="${u}" alt=""></div>`; }).join('')}</div>` : ''}
   <div class="row" style="margin-top:20px"><a class="btn" href="#/package/${l.id}">📦 Package ChatGPT</a>
-  ${l.items.length ? `<a class="btn" href="#/review/${l.id}">✏️ Modifier les questions</a>` : ''}
+  ${l.items.length ? `<a class="btn" href="#/review/${l.id}">✏️ Modifier les questions (parent)</a>` : ''}
   <button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Supprimer</button></div>`);
 }
 async function viewFiche(id) {
@@ -888,43 +901,53 @@ function viewPlay() {
   if (!it) { S.i++; return viewPlay(); }
   const st = S.st ||= { answered: false, flipped: false, order: it.type === 'qcm' ? shuffle(it.choix.map((_, i) => i)) : null };
   let b = '';
+  const actions = (ready, validate) => `<div class="row" style="margin-top:14px">
+      <button class="btn pri" ${ready ? '' : 'disabled'} onclick="${validate}">✅ Valider</button>
+      <button class="btn" onclick="act.reveal()">💡 Voir la réponse</button></div>`;
   if (it.type === 'card') {
-    b = `<div class="card flash" onclick="act.flip()"><div>${esc(it.recto)}</div>
-      ${st.flipped ? `<div class="verso">${esc(it.verso)}</div>` : '<div class="mute small" style="margin-top:16px">Touche pour voir la réponse</div>'}</div>
-      <div class="row" style="justify-content:center">${speakBtn(st.flipped ? it.verso : it.recto)}</div>
-      ${st.flipped ? `<div class="hero"><button class="btn big bad" onclick="act.card(false)">👎 À revoir</button>
-        <button class="btn big good" onclick="act.card(true)">👍 Je savais</button></div>` : ''}`;
+    b = `<div class="card flash" style="cursor:default"><div>${esc(it.recto)}</div>
+      ${st.answered || st.flipped ? `<div class="verso">${esc(it.verso)}</div>` : ''}</div>
+      <div class="row" style="justify-content:center">${speakBtn(st.flipped ? it.verso : it.recto)}</div>`;
+    if (!st.flipped) b += `<form onsubmit="act.cardCheck(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
+        spellcheck="false" placeholder="Écris ta réponse" style="font-size:22px"></form>` + actions(true, 'act.cardCheck()');
+    else if (st.answered) b += feedback(st.correct, '', true, st.revealed);
+    else b += `${st.typed ? `<div class="fb">Ta réponse : <b>${esc(st.typed)}</b></div>` : ''}
+      <p class="center mute">Compare avec la bonne réponse, puis dis-le honnêtement :</p>
+      <div class="hero"><button class="btn big bad" onclick="act.card(false)">👎 À revoir</button>
+        <button class="btn big good" onclick="act.card(true)">👍 J'avais bon</button></div>`;
   }
   if (it.type === 'qcm') {
     b = `<div class="q">${esc(it.question)} ${speakBtn(it.question)}</div><div class="choices">${st.order.map(k => {
-      const cls = st.answered ? (k === it.bonne ? ' good' : k === st.pick ? ' bad' : '') : '';
-      return `<button class="btn${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.qcm(${k})">${esc(it.choix[k])}</button>`; }).join('')}</div>`;
-    if (st.answered) b += feedback(st.correct, st.correct ? it.explication : `Bonne réponse : <b>${esc(it.choix[it.bonne])}</b>. ${esc(it.explication)}`, true);
+      const cls = st.answered ? (k === it.bonne ? ' good' : k === st.pick ? ' bad' : '') : (k === st.pick ? ' sel' : '');
+      return `<button class="btn${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.pick(${k})">${esc(it.choix[k])}</button>`; }).join('')}</div>`;
+    if (!st.answered) b += actions(st.pick !== undefined, 'act.validate()');
+    else b += feedback(st.correct, st.correct ? esc(it.explication) : `Bonne réponse : <b>${esc(it.choix[it.bonne])}</b>. ${esc(it.explication)}`, true, st.revealed);
   }
   if (it.type === 'vf') {
     b = `<div class="q">${esc(it.affirmation)} ${speakBtn(it.affirmation)}</div><div class="hero">
-      ${[true, false].map(v => { const cls = st.answered ? (v === it.vrai ? ' good' : v === st.pick ? ' bad' : '') : '';
-        return `<button class="btn big${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.vf(${v})">${v ? '✅ Vrai' : '❌ Faux'}</button>`; }).join('')}</div>`;
-    if (st.answered) b += feedback(st.correct, `C'est ${it.vrai ? 'vrai' : 'faux'}. ${esc(it.correction)}`, true);
+      ${[true, false].map(v => { const cls = st.answered ? (v === it.vrai ? ' good' : v === st.pick ? ' bad' : '') : (v === st.pick ? ' sel' : '');
+        return `<button class="btn big${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.pick(${v})">${v ? '✅ Vrai' : '❌ Faux'}</button>`; }).join('')}</div>`;
+    if (!st.answered) b += actions(st.pick !== undefined, 'act.validate()');
+    else b += feedback(st.correct, `C'est ${it.vrai ? 'vrai' : 'faux'}. ${esc(it.correction)}`, true, st.revealed);
   }
   if (it.type === 'trou') {
     const filled = st.answered ? `<span class="blank">${esc(it.reponse)}</span>` : '<span class="blank">?</span>';
     b = `<div class="q">${esc(it.phrase).replace('___', filled)} ${speakBtn(it.phrase)}</div>`;
-    if (!st.answered) b += `<form onsubmit="act.trou(event)" class="row"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
-        spellcheck="false" placeholder="Le mot manquant" style="flex:1;font-size:22px"><button class="btn pri">Valider</button></form>
-        <button class="btn" style="margin-top:10px" onclick="act.trouGiveUp()">Je ne sais pas</button>`;
+    if (!st.answered) b += `<form onsubmit="act.trou(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
+        spellcheck="false" placeholder="Le mot manquant" style="font-size:22px"></form>` + actions(true, 'act.trou()');
     else b += feedback(st.correct, st.correct
       ? (st.hint ? `Attention à l'orthographe : <b>${esc(it.reponse)}</b>` : '')
-      : `${st.typed ? `Tu as écrit « ${esc(st.typed)} ». ` : ''}La réponse était <b>${esc(it.reponse)}</b>.`, true)
+      : `${st.typed ? `Tu as écrit « ${esc(st.typed)} ». ` : ''}La réponse était <b>${esc(it.reponse)}</b>.`, true, st.revealed)
       + (!st.correct && st.typed ? `<button class="btn" onclick="act.override()">J'avais bon quand même</button>` : '');
   }
   setView(`<div class="play"><div class="row" style="justify-content:space-between"><span class="kind">${KIND[it.type]} · ${esc(S.lessons.size > 1 ? l.titre : S.title)}</span>
     <span class="mute small">${S.i + 1} / ${S.queue.length}</span></div>
     <div class="progress"><div style="width:${100 * S.i / S.queue.length}%"></div></div>${b}</div>`);
-  if (it.type === 'trou' && !st.answered) $('#t-in')?.focus();
+  if ((it.type === 'trou' && !st.answered) || (it.type === 'card' && !st.flipped)) $('#t-in')?.focus();
 }
-function feedback(ok, text, next) {
-  return `<div class="fb ${ok ? 'ok' : 'ko'}"><b>${ok ? '🎉 Bravo !' : '💡 Pas tout à fait.'}</b> ${text || ''}</div>
+function feedback(ok, text, next, revealed) {
+  const head = ok ? '🎉 Bravo !' : revealed ? '💡 La réponse :' : '💡 Pas tout à fait.';
+  return `<div class="fb ${ok ? 'ok' : 'ko'}"><b>${head}</b> ${text || ''}</div>
     ${next ? `<div class="row" style="justify-content:flex-end"><button class="btn pri" onclick="act.next()" id="next">Suivant →</button></div>` : ''}`;
 }
 function grade(correct) {
@@ -940,13 +963,31 @@ function grade(correct) {
   S.st.answered = true; S.st.correct = correct;
   Lessons.put(l); bumpStreak();
 }
-act.flip = () => { if (!S.st.flipped) { S.st.flipped = true; viewPlay(); } };
+// Cartes : l'enfant écrit sa réponse (ou pas), la compare à la bonne, puis s'auto-évalue.
+act.cardCheck = ev => {
+  ev?.preventDefault();
+  const typed = $('#t-in').value.trim(), { it } = current();
+  S.st.typed = typed; S.st.flipped = true;
+  if (typed && norm(typed) === norm(it.verso)) grade(true);   // réponse exacte : pas besoin de s'auto-évaluer
+  viewPlay();
+};
 act.card = ok => { grade(ok); act.next(); };
-act.qcm = k => { if (S.st.answered) return; S.st.pick = k; grade(k === current().it.bonne); viewPlay(); };
-act.vf = v => { if (S.st.answered) return; S.st.pick = v; grade(v === current().it.vrai); viewPlay(); };
+// QCM et vrai/faux : on choisit, puis on valide.
+act.pick = v => { if (S.st.answered) return; S.st.pick = v; viewPlay(); };
+act.validate = () => {
+  const { it } = current();
+  if (S.st.answered || S.st.pick === undefined) return;
+  grade(it.type === 'qcm' ? S.st.pick === it.bonne : S.st.pick === it.vrai); viewPlay();
+};
+// « Voir la réponse » : compte comme à revoir, la question revient plus tard.
+act.reveal = () => {
+  const { it } = current();
+  if (it.type === 'card') { S.st.typed = ''; S.st.flipped = true; S.st.revealed = true; grade(false); return viewPlay(); }
+  S.st.typed = ''; S.st.pick = undefined; S.st.revealed = true; grade(false); viewPlay();
+};
 act.trou = ev => {
-  ev.preventDefault();
-  const typed = $('#t-in').value.trim(); if (!typed) return;
+  ev?.preventDefault();
+  const typed = $('#t-in').value.trim(); if (!typed) return toast('Écris d\'abord ta réponse');
   const { it } = current();
   const answers = it.reponse.split('/').map(x => x.trim()).filter(Boolean);
   const ok = answers.some(a => norm(a) === norm(typed));
@@ -954,7 +995,6 @@ act.trou = ev => {
   S.st.hint = ok && !answers.some(a => a.toLowerCase() === typed.toLowerCase());
   grade(ok); viewPlay();
 };
-act.trouGiveUp = () => { S.st.typed = ''; grade(false); viewPlay(); };
 act.override = () => {
   const { e, l, it } = current();
   it.box = Math.min(S.st.prev.box + 1, 5); it.due = today() + INTERVALS[it.box]; it.ok = (it.ok || 0) + 1;
