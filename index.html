@@ -107,6 +107,18 @@ textarea{resize:vertical}
   padding:10px 18px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30;max-width:90vw}
 #toast.on{opacity:1}
 .big-emoji{font-size:72px;text-align:center;margin:10px 0}
+body.locked header .streak, body.locked header .gear{visibility:hidden}
+body.locked header .logo{pointer-events:none}
+.lock{max-width:460px;margin:24px auto}
+.pin-dots{display:flex;gap:18px;justify-content:center;margin:18px 0 22px}
+.pin-dots span{width:22px;height:22px;border-radius:50%;border:3px solid var(--pri)}
+.pin-dots span.on{background:var(--pri)}
+.keypad{display:grid;grid-template-columns:repeat(3,84px);gap:14px;justify-content:center}
+.keypad.off{opacity:.35;pointer-events:none}
+.key{width:84px;height:84px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;font-weight:700;font-size:32px;line-height:1;cursor:pointer}
+.key:active{background:var(--soft)}
+.shake{animation:shake .4s} @keyframes shake{20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+.rescue{font:700 34px/1.2 ui-monospace,Consolas,monospace;letter-spacing:4px;background:var(--warn-bg);border-radius:14px;padding:14px;margin:18px 0}
 .lvl-banner{display:flex;gap:16px;align-items:center;flex-wrap:wrap;text-decoration:none;color:var(--ink)}
 .lvl-hero{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
 .lvl-emoji{font-size:46px;line-height:1} .lvl-emoji.big{font-size:76px}
@@ -168,7 +180,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -881,7 +893,7 @@ async function viewProgress() {
     return { mat, q: s.length, n, pct: n ? Math.round(100 * ok / n) : null };
   }).filter(x => x.q);
   const weak = wkMats.filter(x => x.n >= 5).sort((a, b) => a.pct - b.pct)[0];
-  setView(`<h1>🏆 ${name ? `Les progrès de ${esc(name)}` : 'Mes progrès'}</h1>
+  setView(`<h1>🏆 ${name ? `Les progrès ${esc(deName(name))}` : 'Mes progrès'}</h1>
   <div class="card lvl-hero">
     <div class="lvl-emoji big">${lv.emoji}</div>
     <div style="flex:1;min-width:220px"><div class="lvl-name">Niveau ${lv.n} · ${esc(lv.name)}</div>${levelBar(lv, ST.xp)}
@@ -1079,7 +1091,7 @@ function confetti() {
 
 // --- Réglages
 async function viewSettings() {
-  const name = await KV.get('name', ''), goal = await KV.get('goal', 50);
+  const name = await KV.get('name', '') || 'Eden', goal = await KV.get('goal', 50);
   let storage = '';
   try {
     const est = await navigator.storage.estimate(), persisted = await navigator.storage.persisted();
@@ -1095,6 +1107,12 @@ async function viewSettings() {
     <p class="small mute">Une bonne réponse rapporte ${XP_OK} XP, un quiz terminé ${XP_END} XP de bonus (le double sans faute).</p>
     <div class="row"><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
   </div>
+  <div class="card">
+    <h2 style="margin-top:0">🔒 Code secret</h2>
+    <p class="small mute">Demandé à chaque ouverture de l'app, et après 5 minutes passées dans une autre app. Après 5 erreurs, il faut attendre (30 s, puis de plus en plus longtemps).</p>
+    <div class="row"><button class="btn" onclick="act.changePin()">Changer le code secret</button>
+      <button class="btn" onclick="act.newRescue()">Nouveau code parent de secours</button></div>
+  </div>
   <p class="small mute">${storage}</p>
   <p class="small mute">Version ${APP_VERSION}</p>`);
 }
@@ -1104,9 +1122,115 @@ act.saveSettings = async () => {
   toast('Réglages enregistrés'); go('#/');
 };
 
+// --- Verrou : code secret à 4 chiffres pour un seul enfant
+// Le code n'est jamais stocké : seule son empreinte PBKDF2 (sel aléatoire) est gardée sur l'appareil.
+// Un code parent de secours (8 caractères, affiché une fois) permet d'en choisir un nouveau en cas d'oubli.
+const LOCK_AFTER = 5 * 60 * 1000;          // verrouille après 5 min en arrière-plan
+const PIN_ITER = 150000;
+let unlocked = false, hiddenAt = 0, pinBuf = '', lockMode = 'unlock', firstPin = '', lockTimer = null;
+const deName = n => (/^[aeiouyhéèêëàâîïôû]/i.test(n) ? 'd’' : 'de ') + n;   // « d’Eden », « de Léo »
+const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const fromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function digest(secret, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveBits']);
+  return toB64(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PIN_ITER, hash: 'SHA-256' }, key, 256));
+}
+async function sealed(secret) { const salt = crypto.getRandomValues(new Uint8Array(16)); return { salt: toB64(salt), hash: await digest(secret, salt) }; }
+const matches = async (secret, rec) => rec && (await digest(secret, fromB64(rec.salt))) === rec.hash;
+function rescueCode() {
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', r = crypto.getRandomValues(new Uint8Array(8));
+  return [...r].map(x => abc[x % abc.length]).join('').replace(/^(.{4})/, '$1-');
+}
+function setLocked(on) { document.body.classList.toggle('locked', on); }
+async function viewLock() {
+  setLocked(true);
+  const lock = await KV.get('lock', null), name = await KV.get('name', '') || 'Eden';
+  if (!lock && lockMode === 'unlock') lockMode = 'setup1';
+  const wait = lock?.until && lock.until > Date.now() ? Math.ceil((lock.until - Date.now()) / 1000) : 0;
+  const lv = ST ? levelOf(ST.xp) : null;
+  const title = {
+    unlock: `Bonjour ${esc(name)} 👋`, setup1: lock ? 'Nouveau code secret' : `Le code secret ${esc(deName(name))}`,
+    setup2: 'Encore une fois, pour vérifier', rescue: 'Code parent de secours',
+  }[lockMode];
+  const sub = {
+    unlock: wait ? `Trop d'essais : attends <b id="lock-wait">${wait}</b> s` : 'Tape ton code secret',
+    setup1: 'Choisis 4 chiffres faciles à retenir pour toi, et que personne d\'autre ne connaît.',
+    setup2: 'Tape le même code.', rescue: 'Le code de 8 caractères noté par le parent quand le code secret a été créé.',
+  }[lockMode];
+  let body;
+  if (lockMode === 'rescue') body = `<form onsubmit="act.rescue(event)" style="max-width:340px;margin:0 auto">
+      <input type="text" id="r-code" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX" style="font-size:24px;text-align:center;letter-spacing:3px">
+      <div class="row" style="justify-content:center;margin-top:12px"><button type="button" class="btn" onclick="lockMode='unlock';viewLock()">Annuler</button><button class="btn pri">Valider</button></div></form>`;
+  else body = `<div class="pin-dots" id="pin-dots">${[0, 1, 2, 3].map(i => `<span class="${i < pinBuf.length ? 'on' : ''}"></span>`).join('')}</div>
+    <div class="keypad${wait ? ' off' : ''}">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(k =>
+      k ? `<button class="key" onclick="act.key('${k}')">${k}</button>` : '<span></span>').join('')}</div>
+    ${lockMode === 'unlock' ? '<button class="btn" style="margin-top:18px" onclick="lockMode=\'rescue\';pinBuf=\'\';viewLock()">Code oublié ?</button>' : ''}
+    ${lockMode !== 'unlock' && unlocked ? '<button class="btn" style="margin-top:18px" onclick="act.cancelPin()">Annuler</button>' : ''}`;
+  setView(`<div class="lock center">
+    <div class="big-emoji">${lockMode === 'unlock' ? (lv ? lv.emoji : '🔒') : '🔐'}</div>
+    <h1>${title}</h1><p class="mute">${sub}</p>${body}</div>`);
+  clearInterval(lockTimer);
+  if (wait) lockTimer = setInterval(() => {
+    const el = $('#lock-wait'); if (!el) return clearInterval(lockTimer);
+    const s = +el.textContent - 1; if (s <= 0) { clearInterval(lockTimer); viewLock(); } else el.textContent = s;
+  }, 1000);
+}
+act.key = async k => {
+  if ($('.keypad.off')) return;
+  if (k === '⌫') pinBuf = pinBuf.slice(0, -1); else if (pinBuf.length < 4) pinBuf += k;
+  $('#pin-dots').innerHTML = [0, 1, 2, 3].map(i => `<span class="${i < pinBuf.length ? 'on' : ''}"></span>`).join('');
+  if (pinBuf.length < 4) return;
+  const pin = pinBuf; pinBuf = '';
+  if (lockMode === 'setup1') { firstPin = pin; lockMode = 'setup2'; return viewLock(); }
+  if (lockMode === 'setup2') {
+    if (pin !== firstPin) { lockMode = 'setup1'; toast('Les deux codes sont différents, recommence'); return viewLock(); }
+    const old = await KV.get('lock', null), rescue = old?.rescue ? null : rescueCode();
+    await KV.set('lock', { ...(await sealed(pin)), rescue: rescue ? await sealed(rescue) : old.rescue, fails: 0, until: 0 });
+    if (!(await KV.get('name', ''))) await KV.set('name', 'Eden');
+    lockMode = 'unlock'; firstPin = '';
+    if (rescue) return showRescue(rescue);
+    toast('Nouveau code enregistré 🔒'); return finishUnlock();
+  }
+  // déverrouillage
+  const lock = await KV.get('lock', null);
+  if (await matches(pin, lock)) { lock.fails = 0; lock.until = 0; await KV.set('lock', lock); return finishUnlock(); }
+  lock.fails = (lock.fails || 0) + 1;
+  if (lock.fails >= 5) lock.until = Date.now() + Math.min(15 * 60, 30 * 2 ** (lock.fails - 5)) * 1000;   // 30 s, 1 min, 2 min… 15 min max
+  await KV.set('lock', lock);
+  const dots = $('#pin-dots'); dots.classList.add('shake'); setTimeout(() => viewLock(), 450);
+};
+function showRescue(code) {
+  setView(`<div class="lock center"><div class="big-emoji">🗝️</div><h1>Code parent de secours</h1>
+    <p>Si le code secret est oublié, ce code permet d'en choisir un nouveau. <b>Note-le (pour le parent)</b> : il ne sera plus affiché.</p>
+    <p class="rescue">${code}</p>
+    <button class="btn pri big" onclick="finishUnlock()">C'est noté</button></div>`);
+}
+async function finishUnlock() { unlocked = true; setLocked(false); renderStreak(); route(); }
+act.cancelPin = () => { lockMode = 'unlock'; pinBuf = ''; firstPin = ''; setLocked(false); go('#/settings'); };
+act.rescue = async ev => {
+  ev.preventDefault();
+  const lock = await KV.get('lock', null), code = $('#r-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^(.{4})/, '$1-');
+  if (lock?.until > Date.now()) return toast('Trop d\'essais : attends un peu');
+  if (await matches(code, lock?.rescue)) { lockMode = 'setup1'; pinBuf = ''; return viewLock(); }
+  lock.fails = (lock.fails || 0) + 1;
+  if (lock.fails >= 5) lock.until = Date.now() + Math.min(15 * 60, 30 * 2 ** (lock.fails - 5)) * 1000;
+  await KV.set('lock', lock); toast('Code de secours incorrect');
+};
+act.changePin = () => { lockMode = 'setup1'; pinBuf = ''; viewLock(); };
+act.newRescue = async () => {
+  if (!confirm('Créer un nouveau code parent de secours ? L\'ancien ne marchera plus.')) return;
+  const lock = await KV.get('lock', null), code = rescueCode();
+  lock.rescue = await sealed(code); await KV.set('lock', lock); showRescue(code);
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+  else if (unlocked && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER) { unlocked = false; lockMode = 'unlock'; pinBuf = ''; viewLock(); }
+});
+
 // ---------- Routeur ----------
 const routes = { '': viewHome, progress: viewProgress, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
 async function route() {
+  if (!unlocked) return viewLock();
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   if (name !== 'play') window.speechSynthesis?.cancel();
   try { await (routes[name] || viewHome)(...args.map(decodeURIComponent)); }
@@ -1114,7 +1238,10 @@ async function route() {
 }
 function go(h) { if (location.hash === h) route(); else location.hash = h; }
 window.addEventListener('hashchange', route);
-document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && $('#next')) { ev.preventDefault(); act.next(); } });
+document.addEventListener('keydown', ev => {
+  if (document.body.classList.contains('locked') && $('.keypad') && /^([0-9]|Backspace)$/.test(ev.key)) { ev.preventDefault(); return act.key(ev.key === 'Backspace' ? '⌫' : ev.key); }
+  if (ev.key === 'Enter' && $('#next')) { ev.preventDefault(); act.next(); }
+});
 
 navigator.storage?.persist?.().catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
