@@ -139,7 +139,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -447,7 +447,7 @@ function toLesson(r, blobs, matiere) {
 
 // ---------- Vues ----------
 const act = {};
-const dueEntries = ls => ls.filter(l => l.status === 'ready').flatMap(l => l.items.filter(it => (it.due || 0) <= today()).map(it => ({ l, it })));
+const dueEntries = ls => ls.filter(l => l.status === 'ready' || l.status === 'draft').flatMap(l => l.items.filter(it => (it.due || 0) <= today()).map(it => ({ l, it })));
 
 async function viewHome() {
   const ls = (await Lessons.all()).sort((a, b) => b.createdAt - a.createdAt);
@@ -465,7 +465,7 @@ async function viewHome() {
     h += `<h2 class="mat" style="--h:${hue(m)}">${esc(m)}</h2><div class="grid">`;
     for (const l of byMat[m]) {
       const page = l.status === 'package' ? 'package' : 'lesson';
-      const state = { package: '<span class="badge">📦 en attente de ChatGPT</span>', draft: '<span class="badge">à relire</span>' }[l.status]
+      const state = { package: '<span class="badge">📦 en attente de ChatGPT</span>' }[l.status]
         || (l.items.length ? starsOf(l) : '');
       const what = [l.items.length && `${l.items.length} questions`, l.printMd && '🖨️ fiche'].filter(Boolean);
       h += `<a class="tile" style="--h:${hue(m)}" href="#/${page}/${l.id}">
@@ -600,7 +600,7 @@ async function viewPackage(id) {
     <textarea id="p-import" rows="5" placeholder="Colle ici la réponse de ChatGPT"></textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn" onclick="act.pasteInto('#p-import')">📥 Coller</button>
-      <button class="btn pri" onclick="act.importPkg('${l.id}')">✅ Importer</button>
+      <button class="btn pri" onclick="act.importPkg('${l.id}')">${l.format.quiz ? '🚀 Lancer le quiz' : '✅ Importer la fiche'}</button>
       <label class="btn filebtn">📎 Joindre un fichier<input type="file" onchange="act.attach('${l.id}', this)"></label>
     </div>
     <p class="small mute">« Joindre un fichier » : un PDF ou une image que ChatGPT t'a donné, gardé avec la leçon.</p>
@@ -669,10 +669,11 @@ act.importPkg = async id => {
     if (l.titreAuto) { const h = md.match(/^#\s+(.+)$/m); if (h) { l.titre = h[1].trim(); l.titreAuto = false; } }
   }
   if (quiz && !l.items.length) return toast('Le quiz est vide ou mal formé : redemande-le à ChatGPT');
-  l.status = quiz ? 'draft' : (l.status === 'package' ? 'ready' : l.status);
+  l.status = 'ready';
   await Lessons.put(l); E = null;
-  toast([quiz && `Quiz importé (${l.items.length} questions)`, md && 'Fiche importée'].filter(Boolean).join(' · ') + ' ✅');
-  go(quiz ? '#/review/' + l.id : '#/lesson/' + l.id);
+  toast([quiz && `Quiz prêt (${l.items.length} questions)`, md && 'Fiche importée'].filter(Boolean).join(' · ') + ' ✅');
+  if (quiz) startSession(l.items.map(it => ({ l, it })), l.titre, '#/lesson/' + l.id);
+  else go('#/lesson/' + l.id);
 };
 act.attach = async (id, input) => {
   const f = input.files[0]; if (!f) return;
@@ -690,8 +691,8 @@ act.generatePkg = async id => {
     if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
     applyQuiz(l, r);
     if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
-    l.status = 'draft'; await Lessons.put(l); E = null;
-    go('#/review/' + l.id);
+    l.status = 'ready'; await Lessons.put(l); E = null;
+    startSession(l.items.map(it => ({ l, it })), l.titre, '#/lesson/' + l.id);
   } catch (e) {
     console.error(e);
     setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
@@ -782,9 +783,7 @@ function renderReview() {
   const l = E;
   const mats = MATIERES.includes(l.matiere) ? MATIERES : [l.matiere, ...MATIERES];
   let h = `<h1>✏️ Relire la leçon</h1>
-  <div class="card notice">👀 <b>Espace parent : les réponses sont visibles ici.</b> Vérifie, corrige ou supprime ce qui est faux, puis
-    « Valider la leçon ». L'enfant s'entraîne ensuite avec <b>Quiz</b> ou <b>Tout réviser</b> : il y écrit ou choisit sa réponse, la valide,
-    ou demande à voir la réponse.</div>
+  <div class="card notice">👀 <b>Espace parent : les réponses sont visibles ici.</b> Corrige ou supprime une question fausse, puis « Enregistrer ».</div>
   <div class="card">
     <label for="r-titre">Titre</label><input type="text" id="r-titre" value="${esc(l.titre)}">
     <label for="r-mat">Matière</label><select id="r-mat">${mats.map(m => `<option${m === l.matiere ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select>
@@ -796,10 +795,8 @@ function renderReview() {
     if (!its.length) continue;
     h += `<h2>${KIND[type]}s (${its.length})</h2><div class="card">${its.map((it, i) => itemEditor(it, i + 1)).join('')}</div>`;
   }
-  h += `<div class="sticky">${l.status === 'draft'
-      ? `<button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Jeter</button>`
-      : `<a class="btn" href="#/lesson/${l.id}">Annuler</a>`}
-    <button class="btn pri" onclick="act.saveReview()">✅ Valider la leçon</button></div>`;
+  h += `<div class="sticky"><a class="btn" href="#/lesson/${l.id}">Annuler</a>
+    <button class="btn pri" onclick="act.saveReview()">💾 Enregistrer</button></div>`;
   setView(h);
 }
 function readReview(l) {
@@ -832,7 +829,7 @@ act.saveReview = async () => {
   E.status = 'ready';
   await Lessons.put(E);
   const id = E.id; E = null;
-  toast('Leçon enregistrée 👍');
+  toast('Modifications enregistrées 👍');
   go('#/lesson/' + id);
 };
 act.delLesson = async id => {
@@ -846,8 +843,6 @@ async function viewLesson(id) {
   const count = t => l.items.filter(it => it.type === t).length;
   const files = l.files || [];
   setView(`<h1>${esc(l.titre)}</h1>
-  ${l.status === 'draft' ? `<div class="card notice">👀 Leçon pas encore relue par un parent. L'enfant peut déjà jouer avec les boutons ci-dessous ;
-    la relecture (<a href="#/review/${l.id}">✏️ Relire et valider</a>) montre toutes les réponses : à faire par un adulte.</div>` : ''}
   <p class="mute">${esc(l.matiere)}${l.items.length ? ` · ${starsOf(l)} maîtrise ${Math.round(mastery(l) * 100)} %` : ''} · créée le ${dateFr(l.createdAt)}</p>
   ${l.items.length ? `<div class="hero">
     <a class="btn big" href="#/fiche/${l.id}">📖 Fiche résumé</a>
