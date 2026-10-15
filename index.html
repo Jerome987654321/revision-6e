@@ -139,7 +139,7 @@ const DAILY_MAX = 20;                           // questions par séance « Rév
 const MAX_PHOTOS = 6;
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -464,7 +464,7 @@ async function viewHome() {
   for (const m of Object.keys(byMat).sort((a, b) => a.localeCompare(b, 'fr'))) {
     h += `<h2 class="mat" style="--h:${hue(m)}">${esc(m)}</h2><div class="grid">`;
     for (const l of byMat[m]) {
-      const page = { package: 'package', draft: 'review' }[l.status] || 'lesson';
+      const page = l.status === 'package' ? 'package' : 'lesson';
       const state = { package: '<span class="badge">📦 en attente de ChatGPT</span>', draft: '<span class="badge">à relire</span>' }[l.status]
         || (l.items.length ? starsOf(l) : '');
       const what = [l.items.length && `${l.items.length} questions`, l.printMd && '🖨️ fiche'].filter(Boolean);
@@ -846,6 +846,8 @@ async function viewLesson(id) {
   const count = t => l.items.filter(it => it.type === t).length;
   const files = l.files || [];
   setView(`<h1>${esc(l.titre)}</h1>
+  ${l.status === 'draft' ? `<div class="card notice">👀 Leçon pas encore relue par un parent. L'enfant peut déjà jouer avec les boutons ci-dessous ;
+    la relecture (<a href="#/review/${l.id}">✏️ Relire et valider</a>) montre toutes les réponses : à faire par un adulte.</div>` : ''}
   <p class="mute">${esc(l.matiere)}${l.items.length ? ` · ${starsOf(l)} maîtrise ${Math.round(mastery(l) * 100)} %` : ''} · créée le ${dateFr(l.createdAt)}</p>
   ${l.items.length ? `<div class="hero">
     <a class="btn big" href="#/fiche/${l.id}">📖 Fiche résumé</a>
