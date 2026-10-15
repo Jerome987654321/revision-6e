@@ -1,11 +1,12 @@
 # Révisions 6e
 
-Web-app installable (PWA) : on photographie une leçon, une IA gratuite (Gemini, OpenRouter, Groq ou Mistral, au choix dans les réglages)
-prépare une fiche résumé, des cartes, des QCM, des vrai/faux et des textes à trous ; l'enfant
-révise avec la répétition espacée (boîtes de Leitner).
+Web-app installable (PWA) : on photographie une leçon, l'app prépare un package (photos + consigne)
+pour ChatGPT, dont la réponse donne un quiz joué dans l'app (cartes, QCM, vrai/faux, textes à trous)
+et/ou une fiche à imprimer avec corrigé. Révision espacée (boîtes de Leitner), XP, niveaux, objectif
+du jour, badges et suivi par matière.
 
-Tout reste sur l'appareil (IndexedDB du navigateur) : leçons, photos, progression, clé.
-Seule la génération passe par internet, directement de l'appareil vers l'IA choisie.
+Tout reste sur l'appareil (IndexedDB du navigateur) : leçons, photos, progression.
+Aucune clé d'API : la génération se fait dans ChatGPT, avec l'abonnement de l'utilisateur.
 
 ## Fichiers
 
@@ -29,7 +30,7 @@ Le dépôt ne contient ni la clé ni aucune donnée : elles ne vivent que sur l'
 - **Tablette Android** : ouvrir l'adresse dans Chrome → ⋮ → « Ajouter à l'écran d'accueil » / « Installer l'application ».
 - **Windows** : ouvrir l'adresse dans Edge ou Chrome → icône « Installer » dans la barre d'adresse.
 
-Puis ⚙️ Réglages → choisir l'IA → coller sa clé → « Vérifier » → « Enregistrer ». Les clés Gemini « AQ. » sont souvent refusées par Google (401) : OpenRouter est alors le plus simple.
+Puis ⚙️ Réglages : prénom de l'enfant et objectif du jour.
 
 ## Mettre à jour
 

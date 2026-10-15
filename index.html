@@ -106,6 +106,31 @@ textarea{resize:vertical}
   padding:10px 18px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30;max-width:90vw}
 #toast.on{opacity:1}
 .big-emoji{font-size:72px;text-align:center;margin:10px 0}
+.lvl-banner{display:flex;gap:16px;align-items:center;flex-wrap:wrap;text-decoration:none;color:var(--ink)}
+.lvl-hero{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.lvl-emoji{font-size:46px;line-height:1} .lvl-emoji.big{font-size:76px}
+.lvl-name{font-weight:800;font-size:19px}
+.xpbar{height:14px;background:var(--soft);border-radius:99px;overflow:hidden;margin-top:8px}
+.xpbar div{height:100%;background:linear-gradient(90deg,#f7b733,#fc4a1a);border-radius:99px;transition:width 1.4s ease}
+.xp-gain{font-size:42px;font-weight:800;color:#f7931e;margin:8px 0}
+.week{display:flex;justify-content:space-around}
+.wday{display:flex;flex-direction:column;align-items:center;gap:6px}
+.dot{width:40px;height:40px;border-radius:50%;border:3px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff}
+.dot.some{background:var(--soft);border-color:var(--pri)} .dot.full{background:var(--ok);border-color:var(--ok)}
+.wday.today .dot{box-shadow:0 0 0 3px var(--pri)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.matcard{border-top:6px solid hsl(var(--h) 65% 55%);margin:0}
+.lrow{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:16px}
+.crowns{white-space:nowrap;font-size:14px;letter-spacing:-1px} .crowns .off{filter:grayscale(1);opacity:.25}
+.bdg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.bdg{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;text-align:center}
+.bdg-e{font-size:40px} .bdg.locked{opacity:.5} .bdg.locked .bdg-e{filter:grayscale(1)}
+.newbadges{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:12px 0}
+.badge.good-b{background:var(--ok-bg)}
+.ptable{border-collapse:collapse;width:100%} .ptable td,.ptable th{border-bottom:1px solid var(--line);padding:6px;text-align:left}
+.pop{animation:pop .5s ease both} @keyframes pop{0%{transform:scale(.3);opacity:0}80%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+.confetti{position:fixed;top:-40px;font-size:28px;z-index:40;pointer-events:none;animation:fall 2.6s linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
 .check{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:8px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
 .check input{width:24px;height:24px;flex:none;margin:2px 0 0}
 .print-doc{background:#fff;color:#111;padding:24px;border-radius:12px;font-size:16px;line-height:1.5}
@@ -142,9 +167,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const API = 'https://generativelanguage.googleapis.com/v1beta';
-const DEFAULT_MODEL = 'gemini-flash-latest';
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -187,7 +210,7 @@ function today() { const d = new Date(); return Math.floor((d.getTime() - d.getT
 const dateFr = ts => new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 function hue(s) { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
 function mastery(l) { return l.items.length ? l.items.reduce((a, it) => a + Math.min(it.box || 0, 5), 0) / (5 * l.items.length) : 0; }
-function starsOf(l) { const m = mastery(l); const n = m >= .8 ? 3 : m >= .5 ? 2 : m >= .2 ? 1 : 0; return `<span class="stars">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span>`; }
+function starsOf(l) { const c = crownsOf(l); return `<span class="crowns" title="${c} couronnes sur 5">${'👑'.repeat(c)}<span class="off">${'👑'.repeat(5 - c)}</span></span>`; }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600); }
 function speak(text) {
   if (!('speechSynthesis' in window)) return toast('Lecture à voix haute indisponible');
@@ -229,206 +252,19 @@ async function compress(file) {
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   return new Promise(r => c.toBlob(r, 'image/jpeg', .85));
 }
-const b64 = blob => new Promise((res, rej) => {
-  const r = new FileReader();
-  r.onload = () => res(String(r.result).split(',')[1]);
-  r.onerror = () => rej(r.error);
-  r.readAsDataURL(blob);
-});
 function showPhoto(src) {
   const o = document.createElement('div'); o.className = 'overlay';
   o.innerHTML = `<img src="${src}" alt="">`; o.onclick = () => o.remove();
   document.body.appendChild(o);
 }
 
-// ---------- Gemini ----------
-const S_STR = { type: 'STRING' };
-const SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    lisible: { type: 'BOOLEAN' },
-    matiere: S_STR,
-    titre: S_STR,
-    resume: { type: 'ARRAY', items: S_STR },
-    flashcards: { type: 'ARRAY', items: { type: 'OBJECT', properties: { recto: S_STR, verso: S_STR }, required: ['recto', 'verso'] } },
-    qcm: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-      question: S_STR, choix: { type: 'ARRAY', items: S_STR }, bonne: { type: 'INTEGER' }, explication: S_STR },
-      required: ['question', 'choix', 'bonne', 'explication'] } },
-    vrai_faux: { type: 'ARRAY', items: { type: 'OBJECT', properties: { affirmation: S_STR, vrai: { type: 'BOOLEAN' }, correction: S_STR },
-      required: ['affirmation', 'vrai', 'correction'] } },
-    trous: { type: 'ARRAY', items: { type: 'OBJECT', properties: { phrase: S_STR, reponse: S_STR }, required: ['phrase', 'reponse'] } },
-  },
-  required: ['lisible', 'matiere', 'titre', 'resume', 'flashcards', 'qcm', 'vrai_faux', 'trous'],
-};
-function buildPrompt(matiere) {
-  return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
-Voici la ou les photos d'une leçon (cahier, manuel ou fiche), dans l'ordre des pages.
-Matière : ${matiere && matiere !== 'auto' ? matiere : `à déterminer parmi : ${MATIERES.join(', ')}`}.
-
-Règles :
-- Utilise UNIQUEMENT le contenu des photos. N'ajoute aucune notion qui n'y figure pas.
-- Si les photos sont illisibles ou ne contiennent pas de leçon, mets lisible=false et laisse les listes vides.
-- Français, phrases courtes et simples, vocabulaire d'un élève de 6e. Pour une leçon de langue étrangère, consignes en français, mots et phrases à apprendre dans la langue étudiée.
-- Recopie fidèlement l'orthographe des noms propres, dates, formules et mots de vocabulaire.
-- Couvre toute la leçon, sans répéter la même notion sous la même forme.
-- titre : le titre de la leçon (court).
-- resume : 4 à 8 points essentiels, une phrase chacun.
-- flashcards : 6 à 12 cartes (définitions, dates, vocabulaire, formules, règles). recto = question courte, verso = réponse courte.
-- qcm : 6 à 10 questions, exactement 4 choix plausibles dont un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase.
-- vrai_faux : 4 à 8 affirmations, environ la moitié fausses ; correction = la phrase juste.
-- trous : 4 à 8 phrases de la leçon où UN mot-clé est remplacé par ___ (trois tirets bas) ; reponse = le mot manquant (1 à 3 mots).`;
-}
+// ---------- Réponse de ChatGPT ----------
 class ApiError extends Error {}
-function apiMessage(status, msg) {
-  if (/api key not valid|API_KEY_INVALID/i.test(msg)) return 'La clé Gemini n\'est pas valide. Vérifie-la dans les réglages.';
-  if (status === 429) return 'Quota gratuit atteint pour le moment. Réessaie dans quelques minutes (ou demain).';
-  if (status === 403) return 'Clé refusée par Google (API non activée ou clé restreinte).';
-  if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
-  if (status >= 500) return 'Le service Gemini est surchargé. Réessaie dans une minute.';
-  if (status === 401) return `Google refuse la clé (401). Message de Google : ${msg || 'aucun'}`;
-  return `Erreur Gemini ${status}${msg ? ' : ' + msg : ''}`;
-}
-// Trois façons d'envoyer la clé : les clés « AIza » passent partout, les nouvelles clés « AQ. » ne sont pas
-// acceptées de la même façon selon les comptes. On essaie dans l'ordre et on retient celle qui marche.
-const AUTH_MODES = {
-  header: (url, key) => [url, { 'x-goog-api-key': key }],
-  query: (url, key) => [url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(key), {}],
-  bearer: (url, key) => [url, { Authorization: 'Bearer ' + key }],
-};
-const isAuthError = (status, msg) => status === 401 || (status === 400 && /api key|credential|authenticat/i.test(msg)) || (status === 403 && /api key|credential|authenticat|unregistered/i.test(msg));
-async function gemini(path, init) {
-  const key = (await KV.get('apiKey', '')).replace(/\s+/g, '');
-  if (!key) throw new ApiError('Ajoute d\'abord ta clé Gemini dans les réglages ⚙️.');
-  const saved = await KV.get('authMode', 'header');
-  const modes = [saved, ...Object.keys(AUTH_MODES).filter(m => m !== saved)];
-  let firstErr = null;
-  for (const mode of modes) {
-    const [url, auth] = AUTH_MODES[mode](API + path, key);
-    const headers = { ...auth, ...(init?.body ? { 'Content-Type': 'application/json' } : {}) };
-    let res;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try { res = await fetch(url, { ...init, headers }); }
-      catch { throw new ApiError('Pas de connexion internet.'); }
-      if (res.status < 500) break;
-      await new Promise(r => setTimeout(r, 3000));
-    }
-    if (res.ok) {
-      if (mode !== saved) await KV.set('authMode', mode);
-      return res.json();
-    }
-    let msg = '';
-    try { const e = (await res.json()).error || {}; msg = [e.message, ...(e.details || []).map(d => d.reason).filter(Boolean)].filter(Boolean).join(' — '); } catch {}
-    firstErr ||= { status: res.status, msg };
-    if (!isAuthError(res.status, msg)) throw new ApiError(apiMessage(res.status, msg));
-  }
-  throw new ApiError(apiMessage(firstErr.status, firstErr.msg));
-}
-// ---------- Autres fournisseurs (API compatible OpenAI) ----------
-const PROVIDERS = {
-  gemini: { label: 'Google Gemini', keyUrl: 'https://aistudio.google.com/apikey' },
-  openrouter: { label: 'OpenRouter (modèles gratuits)', base: 'https://openrouter.ai/api/v1', keyUrl: 'https://openrouter.ai/settings/keys' },
-  groq: { label: 'Groq', base: 'https://api.groq.com/openai/v1', keyUrl: 'https://console.groq.com/keys' },
-  mistral: { label: 'Mistral', base: 'https://api.mistral.ai/v1', keyUrl: 'https://console.mistral.ai/api-keys' },
-};
-const keyOf = p => KV.get(p === 'gemini' ? 'apiKey' : 'key:' + p, '');
-const modelOf = p => KV.get(p === 'gemini' ? 'model' : 'model:' + p, p === 'gemini' ? DEFAULT_MODEL : '');
-const JSON_SHAPE = `
-
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, exactement de cette forme :
-{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"..."}]}`;
-function oaMessage(status, msg, label) {
-  if (status === 401) return `${label} ne reconnaît pas cette clé (401 : ${msg || 'clé refusée'}). Elle est mal copiée ou a été supprimée : crée une nouvelle clé et recopie-la en entier dans les réglages.`;
-  if (status === 402) return `${label} demande du crédit pour ce modèle : choisis un modèle gratuit dans les réglages.`;
-  if (status === 429) return /per.day|daily|quota/i.test(msg)
-    ? `Limite gratuite du jour atteinte chez ${label}. Réessaie demain.${msg ? ' (' + msg + ')' : ''}`
-    : `Les modèles gratuits sont saturés en ce moment. Réessaie dans quelques minutes.${msg ? ' (' + msg + ')' : ''}`;
-  if (status === 404) return 'Modèle introuvable : choisis-en un autre dans les réglages (bouton « Vérifier la clé »).';
-  if (status >= 500) return `Le service ${label} est surchargé. Réessaie dans une minute.`;
-  return `Erreur ${label} ${status}${msg ? ' : ' + msg : ''}`;
-}
-async function oa(p, path, body) {
-  const key = (await keyOf(p)).replace(/\s+/g, '');
-  if (!key) throw new ApiError('Ajoute d\'abord ta clé dans les réglages ⚙️.');
-  const headers = { Authorization: 'Bearer ' + key, ...(body ? { 'Content-Type': 'application/json' } : {}),
-    ...(p === 'openrouter' ? { 'X-Title': 'Revisions 6e' } : {}) };
-  let res;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try { res = await fetch(PROVIDERS[p].base + path, body ? { method: 'POST', headers, body: JSON.stringify(body) } : { headers }); }
-    catch { throw new ApiError(`Pas de connexion internet, ou ${PROVIDERS[p].label} refuse les appels depuis le navigateur.`); }
-    if (res.status < 500) break;
-    await new Promise(r => setTimeout(r, 3000));
-  }
-  if (!res.ok) {
-    let msg = ''; try { const j = await res.json(); msg = [j.error?.message || j.message || j.detail || '', j.error?.metadata?.raw].filter(x => x && typeof x === 'string').join(' — '); if (typeof msg !== 'string') msg = JSON.stringify(msg); } catch {}
-    const err = new ApiError(oaMessage(res.status, msg, PROVIDERS[p].label)); err.status = res.status; throw err;
-  }
-  return res.json();
-}
 function parseJsonText(text) {
   const t = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
   const a = t.indexOf('{'), z = t.lastIndexOf('}');
-  if (a < 0 || z < a) throw new ApiError('L\'IA n\'a pas renvoyé de questions. Réessaie, ou choisis un autre modèle.');
-  try { return JSON.parse(t.slice(a, z + 1)); } catch { throw new ApiError('Réponse de l\'IA illisible. Réessaie, ou choisis un autre modèle.'); }
-}
-async function oaGenerate(p, blobs, matiere) {
-  const model = await modelOf(p);
-  if (!model) throw new ApiError('Choisis un modèle dans les réglages (bouton « Vérifier la clé »).');
-  const content = [{ type: 'text', text: buildPrompt(matiere) + JSON_SHAPE }];
-  for (const b of blobs) content.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + await b64(b) } });
-  // Les modèles gratuits sont souvent saturés : on essaie le modèle choisi, puis les autres modèles de la liste.
-  const others = await KV.get('models:' + p, []);
-  const models = [...new Set([model, ...others, ...(p === 'openrouter' ? ['openrouter/free'] : [])])].slice(0, 6);
-  let lastErr;
-  for (const m of models) {
-    const body = { model: m, messages: [{ role: 'user', content }], temperature: .4, response_format: { type: 'json_object' } };
-    try {
-      let data;
-      try { data = await oa(p, '/chat/completions', body); }
-      catch (e) {
-        if (e.status !== 400) throw e;
-        delete body.response_format;            // certains modèles gratuits ne connaissent pas le mode JSON
-        data = await oa(p, '/chat/completions', body);
-      }
-      const r = parseJsonText(data.choices?.[0]?.message?.content);
-      if (m !== model) toast(`Modèle de secours utilisé : ${m}`);
-      return r;
-    } catch (e) {
-      lastErr = e;
-      const retryable = e.status === 429 || e.status === 400 || e.status === 404 || e.status >= 500 || !e.status;
-      if (!retryable || (e.status === 429 && /du jour/.test(e.message))) throw e;
-    }
-  }
-  throw lastErr;
-}
-async function oaModels(p) {
-  const list = (await oa(p, '/models')).data || [];
-  const free = m => !m.pricing || (Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0);
-  const vision = m => (m.architecture?.input_modalities || []).includes('image') || m.capabilities?.vision === true
-    || /vision|llama-4|scout|maverick|pixtral|gemma-3|qwen.*vl|vl-/i.test(m.id);
-  const names = list.filter(m => vision(m) && (p !== 'openrouter' || free(m))).map(m => m.id)
-    .filter(n => !/safety|guard|lyria|tts|audio|embed|moderation|ocr/i.test(n));
-  const rank = n => /gemini|gemma/.test(n) ? 0 : /mistral|pixtral/.test(n) ? 1 : /llama-4|maverick|scout/.test(n) ? 2 : /qwen/.test(n) ? 3 : 4;
-  return names.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
-}
-async function generate(blobs, matiere) {
-  const p = await KV.get('provider', 'gemini');
-  return p === 'gemini' ? geminiGenerate(blobs, matiere) : oaGenerate(p, blobs, matiere);
-}
-async function geminiGenerate(blobs, matiere) {
-  const model = (await KV.get('model', DEFAULT_MODEL)).replace(/^models\//, '');
-  const parts = [{ text: buildPrompt(matiere) }];
-  for (const b of blobs) parts.push({ inline_data: { mime_type: 'image/jpeg', data: await b64(b) } });
-  const data = await gemini(`/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: .4 },
-    }),
-  });
-  const cand = data.candidates?.[0];
-  const text = (cand?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('');
-  if (!text) throw new ApiError(`Gemini n'a rien renvoyé (${cand?.finishReason || data.promptFeedback?.blockReason || 'raison inconnue'}).`);
-  try { return JSON.parse(text); } catch { throw new ApiError('Réponse de Gemini illisible. Réessaie.'); }
+  if (a < 0 || z < a) throw new ApiError('Je ne trouve pas de quiz dans cette réponse.');
+  try { return JSON.parse(t.slice(a, z + 1)); } catch { throw new ApiError('Le quiz de cette réponse est illisible : redemande-le à ChatGPT.'); }
 }
 function toLesson(r, blobs, matiere) {
   const s = v => String(v ?? '').trim();
@@ -460,6 +296,7 @@ async function viewHome() {
   let h = '';
   await loadPending();
   if (pending.length) h += `<div class="card notice">📷 ${pending.length} photo${pending.length > 1 ? 's' : ''} en attente : <a href="#/new">reprendre la nouvelle leçon</a>.</div>`;
+  h += await progressBanner();
   h += `<div class="hero">
     <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
     <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
@@ -639,7 +476,6 @@ async function viewPackage(id) {
     </div>
     <p class="small mute">« Joindre un fichier » : un PDF ou une image que ChatGPT t'a donné, gardé avec la leçon.</p>
   </div>
-  ${await keyOf(await KV.get('provider', 'gemini')) && l.format.quiz ? `<p class="small mute">Ou, sans ChatGPT : <button class="btn" onclick="act.generatePkg('${l.id}')">✨ Quiz avec l'IA des réglages</button></p>` : ''}
   <div class="row" style="margin-top:12px">${l.items.length || l.printMd || l.files.length ? `<a class="btn" href="#/lesson/${l.id}">Voir la leçon →</a>` : ''}
     <button class="btn danger" onclick="act.delLesson('${l.id}')">🗑️ Supprimer</button></div>`);
 }
@@ -716,25 +552,6 @@ act.attach = async (id, input) => {
   if (l.status === 'package') l.status = 'ready';
   await Lessons.put(l); toast('Fichier gardé avec la leçon ✅'); viewPackage(id);
 };
-act.generatePkg = async id => {
-  const l = await Lessons.get(id);
-  setView(`<div class="card center"><div class="spinner"></div><h2>L'IA lit la leçon…</h2>
-    <p class="mute">Cela prend en général 10 à 60 secondes.</p></div>`);
-  try {
-    const r = await generate(l.photos, l.matiereAuto ? 'auto' : l.matiere);
-    if (r.lisible === false) throw new ApiError('L\'IA n\'arrive pas à lire la leçon. Reprends la photo plus nettement, bien à plat.');
-    applyQuiz(l, r);
-    if (!l.items.length) throw new ApiError('Aucune question n\'a pu être créée à partir de ces photos.');
-    l.status = 'ready'; await Lessons.put(l); E = null;
-    startSession(l.items.map(it => ({ l, it })), l.titre, '#/lesson/' + l.id);
-  } catch (e) {
-    console.error(e);
-    setView(`<div class="card"><h2>😕 Ça n'a pas marché</h2><p>${esc(e instanceof ApiError ? e.message : 'Erreur inattendue : ' + e.message)}</p>
-      <div class="row"><button class="btn pri" onclick="act.generatePkg('${l.id}')">Réessayer</button><a class="btn" href="#/package/${l.id}">Revenir au package</a>
-      <a class="btn" href="#/settings">Réglages</a></div></div>`);
-  }
-};
-
 // --- Fiche à imprimer
 function mdToHtml(md) {
   const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<i>$2</i>')
@@ -900,11 +717,195 @@ async function viewFiche(id) {
   <div class="row"><a class="btn" href="#/lesson/${l.id}">← Retour</a><button class="btn pri" onclick="act.start('${l.id}','all')">Je m'entraîne 💪</button></div>`);
 }
 
+// --- Progrès : XP, niveaux, objectif du jour, badges, suivi par matière (tout reste sur l'appareil)
+const XP_OK = 10, XP_END = 20;
+const LEVELS = [[0, '🐣', 'Poussin curieux'], [100, '🐸', 'Têtard malin'], [250, '🦊', 'Petit renard rusé'], [500, '🦉', 'Apprenti savant'],
+  [800, '🧭', 'Explorateur'], [1200, '🕵️', 'Détective du savoir'], [1700, '🦸', 'Super cerveau'], [2300, '🏅', 'Champion des leçons'],
+  [3000, '🚀', 'Maître des révisions'], [4000, '👑', 'Génie de la 6e']];
+function levelOf(xp) {
+  let i = LEVELS.length - 1;
+  while (i > 0 && xp < LEVELS[i][0]) i--;
+  if (i < LEVELS.length - 1) return { n: i + 1, emoji: LEVELS[i][1], name: LEVELS[i][2], from: LEVELS[i][0], to: LEVELS[i + 1][0], next: LEVELS[i + 1] };
+  const extra = Math.floor((xp - LEVELS[i][0]) / 1200);       // au-delà du dernier palier : un niveau tous les 1200 XP
+  const from = LEVELS[i][0] + extra * 1200;
+  return { n: i + 1 + extra, emoji: LEVELS[i][1], name: LEVELS[i][2], from, to: from + 1200, next: [from + 1200, LEVELS[i][1], LEVELS[i][2]] };
+}
+const BADGES = [
+  ['first_lesson', '🥇', 'Première leçon', 'Créer sa première leçon', s => s.lessons >= 1],
+  ['first_quiz', '🎮', 'Premier quiz', 'Terminer un quiz', s => s.sessions >= 1],
+  ['perfect', '💯', 'Sans-faute', 'Un quiz de 5 questions ou plus sans erreur', s => s.perfect >= 1],
+  ['goal', '⭐', 'Objectif atteint', "Atteindre l'objectif du jour", s => s.goalDays >= 1],
+  ['streak3', '🔥', '3 jours de suite', "Réviser 3 jours d'affilée", s => s.best >= 3],
+  ['streak7', '☄️', '7 jours de suite', "Réviser 7 jours d'affilée", s => s.best >= 7],
+  ['ok100', '🎯', '100 bonnes réponses', '100 bonnes réponses au total', s => s.ok >= 100],
+  ['ok500', '🏹', '500 bonnes réponses', '500 bonnes réponses au total', s => s.ok >= 500],
+  ['crown', '👑', 'Leçon maîtrisée', 'Obtenir 5 couronnes sur une leçon', s => s.crowned >= 1],
+  ['mats3', '🧭', 'Touche-à-tout', 'Des leçons dans 3 matières', s => s.matCount >= 3],
+  ['mat5', '📚', 'Spécialiste', '5 leçons dans une même matière', s => s.maxMatLessons >= 5],
+  ['level5', '🚀', 'Niveau 5', 'Atteindre le niveau 5', s => s.level >= 5],
+];
+const crownsOf = l => Math.min(5, Math.floor(mastery(l) * 5 + 1e-9));
+let ST = null;
+async function loadStats() {
+  if (ST) return ST;
+  ST = await KV.get('stats', null);
+  if (!ST) {   // premier lancement du suivi : on part des réponses déjà données
+    ST = { xp: 0, ok: 0, n: 0, sessions: 0, perfect: 0, best: 0, days: {}, mats: {}, badges: {} };
+    for (const l of await Lessons.all()) for (const it of l.items) {
+      const m = ST.mats[l.matiere] ||= { ok: 0, n: 0, quiz: 0, sessions: [] };
+      ST.ok += it.ok || 0; ST.n += it.seen || 0; m.ok += it.ok || 0; m.n += it.seen || 0;
+    }
+    ST.xp = ST.ok * XP_OK;
+    await KV.set('stats', ST);
+  }
+  return ST;
+}
+const saveStats = () => KV.set('stats', ST);
+const dayStat = () => ST.days[today()] ||= { xp: 0, ok: 0, n: 0 };
+function gainXp(x) { ST.xp += x; dayStat().xp += x; if (S) S.xp = (S.xp || 0) + x; }
+function track(mat, correct) {     // une réponse donnée pendant un quiz
+  const d = dayStat(), m = ST.mats[mat] ||= { ok: 0, n: 0, quiz: 0, sessions: [] }, sm = S.byMat[mat] ||= { ok: 0, n: 0 };
+  ST.n++; d.n++; m.n++; sm.n++;
+  if (correct) { ST.ok++; d.ok++; m.ok++; sm.ok++; gainXp(XP_OK); }
+  saveStats();
+}
+function trackFix(mat) {           // « J'avais bon quand même »
+  const d = dayStat(), m = ST.mats[mat], sm = S.byMat[mat];
+  ST.ok++; d.ok++; m.ok++; sm.ok++; gainXp(XP_OK); saveStats();
+}
+async function streakNow() { const st = await KV.get('streak', { last: -1, n: 0 }); return st.last >= today() - 1 ? st.n : 0; }
+async function badgeContext() {
+  const ls = (await Lessons.all()).filter(l => l.status !== 'package');
+  const goal = await KV.get('goal', 50), per = {};
+  for (const l of ls) per[l.matiere] = (per[l.matiere] || 0) + 1;
+  return { lessons: ls.length, sessions: ST.sessions, perfect: ST.perfect, ok: ST.ok, best: Math.max(ST.best, await streakNow()),
+    goalDays: Object.values(ST.days).filter(d => d.xp >= goal).length, crowned: ls.filter(l => l.items.length && crownsOf(l) >= 5).length,
+    matCount: Object.keys(per).length, maxMatLessons: Math.max(0, ...Object.values(per)), level: levelOf(ST.xp).n };
+}
+async function checkBadges() {
+  const ctx = await badgeContext(), won = [];
+  for (const [id, emo, name, , test] of BADGES) if (!ST.badges[id] && test(ctx)) { ST.badges[id] = Date.now(); won.push([emo, name]); }
+  if (won.length) await saveStats();
+  return won;
+}
+async function finishSession() {   // fin de quiz : bonus, historique par matière, badges
+  if (S.result) return S.result;
+  const perfect = S.answered >= 5 && S.ok === S.answered;
+  const bonus = S.answered ? XP_END * (perfect ? 2 : 1) : 0;
+  gainXp(bonus);
+  if (S.answered) {
+    ST.sessions++; if (perfect) ST.perfect++;
+    for (const [mat, r] of Object.entries(S.byMat)) {
+      const m = ST.mats[mat]; m.quiz = (m.quiz || 0) + 1;
+      m.sessions = [...m.sessions, { d: today(), ok: r.ok, n: r.n }].slice(-30);
+    }
+  }
+  ST.best = Math.max(ST.best, await streakNow());
+  await saveStats();
+  S.result = { bonus, perfect, badges: await checkBadges() };
+  return S.result;
+}
+function ring(value, goal, size = 64) {
+  const r = size / 2 - 6, c = 2 * Math.PI * r, f = Math.min(1, goal ? value / goal : 0);
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="var(--soft)" stroke-width="8" fill="none"/>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="${f >= 1 ? 'var(--ok)' : 'var(--pri)'}" stroke-width="8" fill="none"
+      stroke-linecap="round" stroke-dasharray="${f * c} ${c}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
+    <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-size="${size / 4.2}" font-weight="700" fill="var(--ink)">${f >= 1 ? '⭐' : Math.round(f * 100) + '%'}</text></svg>`;
+}
+function levelBar(lv, xp) {
+  const pct = Math.round(100 * (xp - lv.from) / (lv.to - lv.from));
+  return `<div class="xpbar"><div style="width:${pct}%"></div></div>
+    <p class="small mute" style="margin:6px 0 0">${xp} XP · encore <b>${lv.to - xp} XP</b> pour ${lv.next[1]} ${esc(lv.next[2])}</p>`;
+}
+function spark(sessions) {
+  const pts = sessions.slice(-10).map(s => s.n ? s.ok / s.n : 0);
+  if (pts.length < 2) return '<span class="small mute">courbe après 2 quiz</span>';
+  const w = 150, h = 40, step = w / (pts.length - 1);
+  const xy = pts.map((p, i) => `${(i * step).toFixed(1)},${(h - 4 - p * (h - 8)).toFixed(1)}`);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="spark" aria-label="Réussite des 10 derniers quiz">
+    <polyline points="${xy.join(' ')}" fill="none" stroke="var(--pri)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+    ${xy.map(p => `<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--pri)"/>`).join('')}</svg>`;
+}
+function trend(sessions) {
+  const pct = a => a.reduce((x, s) => x + s.ok, 0) / Math.max(1, a.reduce((x, s) => x + s.n, 0));
+  if (sessions.length < 4) return '';
+  const last = sessions.slice(-3), before = sessions.slice(-6, -3);
+  const d = pct(last) - pct(before);
+  return d > .05 ? '<span class="badge good-b">✨ en progrès</span>' : d < -.1 ? '<span class="badge">💪 à retravailler</span>' : '';
+}
+const dayLetter = d => 'DLMMJVS'[new Date(d * 86400000 + new Date().getTimezoneOffset() * 60000).getDay()];
+async function progressBanner() {
+  await loadStats();
+  const lv = levelOf(ST.xp), goal = await KV.get('goal', 50), d = ST.days[today()]?.xp || 0;
+  return `<a class="card lvl-banner" href="#/progress">
+    <div class="lvl-emoji">${lv.emoji}</div>
+    <div style="flex:1;min-width:0"><div class="lvl-name">Niveau ${lv.n} · ${esc(lv.name)}</div>${levelBar(lv, ST.xp)}</div>
+    <div class="center">${ring(d, goal)}<div class="small mute">${d}/${goal} XP</div></div>
+    <span class="btn pri">🏆 Mes progrès</span></a>`;
+}
+async function viewProgress() {
+  await loadStats();
+  const ls = (await Lessons.all()).filter(l => l.status !== 'package');
+  const lv = levelOf(ST.xp), goal = await KV.get('goal', 50), name = await KV.get('name', ''), streak = await streakNow();
+  await checkBadges();
+  const t = today(), d = ST.days[t]?.xp || 0;
+  const week = [...Array(7)].map((_, i) => t - 6 + i).map(day => {
+    const x = ST.days[day]?.xp || 0;
+    return `<div class="wday${day === t ? ' today' : ''}"><span class="small mute">${dayLetter(day)}</span>
+      <span class="dot ${x >= goal ? 'full' : x > 0 ? 'some' : ''}">${x >= goal ? '✓' : ''}</span></div>`;
+  }).join('');
+  const mats = [...new Set([...Object.keys(ST.mats), ...ls.map(l => l.matiere)])].sort((a, b) => a.localeCompare(b, 'fr'));
+  const matCards = mats.map(mat => {
+    const m = ST.mats[mat] || { ok: 0, n: 0, quiz: 0, sessions: [] }, lessons = ls.filter(l => l.matiere === mat);
+    return `<div class="card matcard" style="--h:${hue(mat)}">
+      <div class="row" style="justify-content:space-between"><h3 class="mat" style="--h:${hue(mat)};margin:0">${esc(mat)}</h3>${trend(m.sessions)}</div>
+      <p class="small" style="margin:8px 0"><b>${lessons.length}</b> leçon${lessons.length > 1 ? 's' : ''} · <b>${m.quiz || 0}</b> quiz terminé${(m.quiz || 0) > 1 ? 's' : ''}
+        · <b>${m.n ? Math.round(100 * m.ok / m.n) : 0} %</b> de bonnes réponses</p>
+      ${spark(m.sessions)}
+      ${lessons.filter(l => l.items.length).map(l => `<a class="lrow" href="#/lesson/${l.id}"><span>${esc(l.titre)}</span>
+        <span class="crowns" title="${crownsOf(l)} couronnes sur 5">${'👑'.repeat(crownsOf(l))}<span class="off">${'👑'.repeat(5 - crownsOf(l))}</span></span></a>`).join('')}
+    </div>`;
+  }).join('');
+  const badges = BADGES.map(([id, emo, bname, hint]) => {
+    const got = ST.badges[id];
+    return `<div class="bdg${got ? '' : ' locked'}" title="${esc(hint)}"><div class="bdg-e">${emo}</div><div class="small"><b>${esc(bname)}</b></div>
+      <div class="small mute">${got ? dateFr(got) : esc(hint)}</div></div>`;
+  }).join('');
+  const since = t - 6;
+  const wk = Object.entries(ST.days).filter(([k]) => +k >= since).reduce((a, [, v]) => ({ ok: a.ok + v.ok, n: a.n + v.n, xp: a.xp + v.xp }), { ok: 0, n: 0, xp: 0 });
+  const wkMats = mats.map(mat => {
+    const s = (ST.mats[mat]?.sessions || []).filter(x => x.d >= since);
+    const ok = s.reduce((a, x) => a + x.ok, 0), n = s.reduce((a, x) => a + x.n, 0);
+    return { mat, q: s.length, n, pct: n ? Math.round(100 * ok / n) : null };
+  }).filter(x => x.q);
+  const weak = wkMats.filter(x => x.n >= 5).sort((a, b) => a.pct - b.pct)[0];
+  setView(`<h1>🏆 ${name ? `Les progrès de ${esc(name)}` : 'Mes progrès'}</h1>
+  <div class="card lvl-hero">
+    <div class="lvl-emoji big">${lv.emoji}</div>
+    <div style="flex:1;min-width:220px"><div class="lvl-name">Niveau ${lv.n} · ${esc(lv.name)}</div>${levelBar(lv, ST.xp)}
+      <p class="small" style="margin:10px 0 0">🔥 <b>${streak}</b> jour${streak > 1 ? 's' : ''} d'affilée · record ${Math.max(ST.best, streak)} · ✅ ${ST.ok} bonnes réponses · 🎮 ${ST.sessions} quiz</p></div>
+    <div class="center">${ring(d, goal, 96)}<div class="small"><b>${d}/${goal} XP</b><br><span class="mute">objectif du jour</span></div></div>
+  </div>
+  <div class="card"><div class="week">${week}</div></div>
+  <h2>Par matière</h2>
+  ${matCards ? `<div class="grid2">${matCards}</div>` : '<p class="mute">Fais un premier quiz pour voir tes progrès par matière.</p>'}
+  <h2>Badges <span class="mute small">${Object.keys(ST.badges).length}/${BADGES.length}</span></h2>
+  <div class="bdg-grid">${badges}</div>
+  <details class="card" style="margin-top:20px"><summary><b>👨‍👩‍👦 Résumé pour les parents (7 derniers jours)</b></summary>
+    <p>${wkMats.reduce((a, x) => a + x.q, 0)} quiz · ${wk.n} réponses · ${wk.n ? Math.round(100 * wk.ok / wk.n) : 0} % de bonnes réponses · ${wk.xp} XP ·
+      objectif atteint ${Object.entries(ST.days).filter(([k, v]) => +k >= since && v.xp >= goal).length} jour(s) sur 7</p>
+    ${wkMats.length ? `<table class="ptable"><tr><th>Matière</th><th>Quiz</th><th>Réponses</th><th>Réussite</th></tr>
+      ${wkMats.map(x => `<tr><td>${esc(x.mat)}</td><td>${x.q}</td><td>${x.n}</td><td>${x.pct ?? '—'} %</td></tr>`).join('')}</table>` : '<p class="mute">Aucun quiz cette semaine.</p>'}
+    ${weak && weak.pct < 70 ? `<p>À retravailler en priorité : <b>${esc(weak.mat)}</b> (${weak.pct} % de bonnes réponses).</p>` : ''}
+  </details>`);
+}
+
 // --- Séance de révision
 let S = null;
 function startSession(entries, title, back) {
   S = { queue: shuffle(entries.map(({ l, it }) => ({ lid: l.id, iid: it.id }))), lessons: new Map(entries.map(({ l }) => [l.id, l])),
-    i: 0, answered: 0, ok: 0, title, back, requeued: new Set(), st: null };
+    i: 0, answered: 0, ok: 0, title, back, requeued: new Set(), st: null, byMat: {}, xp: 0 };
   go('#/play');
 }
 act.start = async (id, mode) => {
@@ -992,6 +993,7 @@ function grade(correct) {
     if (!S.requeued.has(it.id)) { S.requeued.add(it.id); S.queue.push(e); }  // la question revient en fin de séance
   }
   S.st.answered = true; S.st.correct = correct;
+  track(l.matiere, correct);
   Lessons.put(l); bumpStreak();
 }
 // Cartes : l'enfant écrit sa réponse (ou pas), la compare à la bonne, puis s'auto-évalue.
@@ -1031,101 +1033,78 @@ act.override = () => {
   it.box = Math.min(S.st.prev.box + 1, 5); it.due = today() + INTERVALS[it.box]; it.ok = (it.ok || 0) + 1;
   if (S.requeued.has(it.id) && S.queue[S.queue.length - 1] === e) { S.queue.pop(); S.requeued.delete(it.id); }
   S.ok++; S.st.correct = true; S.st.hint = false;
+  trackFix(l.matiere);
   Lessons.put(l); viewPlay();
 };
 act.next = () => { S.i++; S.st = null; viewPlay(); };
-function renderEnd() {
+async function renderEnd() {
+  const r = await finishSession();
+  const name = await KV.get('name', ''), goal = await KV.get('goal', 50);
   const pct = S.answered ? Math.round(100 * S.ok / S.answered) : 0;
-  const [emo, msg] = pct >= 90 ? ['🏆', 'Excellent !'] : pct >= 70 ? ['🌟', 'Très bien !'] : pct >= 50 ? ['💪', 'Bien, continue !'] : ['🌱', 'On y retourne demain, ça va rentrer !'];
-  setView(`<div class="play card center"><div class="big-emoji">${emo}</div><h1>${msg}</h1>
-    <p style="font-size:22px">${S.ok} bonne${S.ok > 1 ? 's' : ''} réponse${S.ok > 1 ? 's' : ''} sur ${S.answered}</p>
+  const [emo, msg] = r.perfect ? ['💯', 'Sans-faute'] : pct >= 90 ? ['🏆', 'Excellent'] : pct >= 70 ? ['🌟', 'Très bien'] : pct >= 50 ? ['💪', 'Bien, continue'] : ['🌱', 'Ça va rentrer, on y retourne demain'];
+  const after = levelOf(ST.xp), before = levelOf(ST.xp - S.xp);
+  const dayXp = ST.days[today()]?.xp || 0, goalNow = dayXp >= goal && dayXp - S.xp < goal;
+  const up = after.n > before.n;
+  const startPct = up ? 0 : Math.round(100 * (ST.xp - S.xp - after.from) / (after.to - after.from));
+  setView(`<div class="play card center"><div class="big-emoji">${emo}</div><h1>${msg}${name ? ' ' + esc(name) : ''} !</h1>
+    <p style="font-size:22px;margin:4px 0">${S.ok} bonne${S.ok > 1 ? 's' : ''} réponse${S.ok > 1 ? 's' : ''} sur ${S.answered}</p>
+    <div class="xp-gain pop">+${S.xp} XP</div>
+    ${r.bonus ? `<p class="small mute" style="margin:0">dont ${r.bonus} XP de bonus de fin${r.perfect ? ' (doublé : sans-faute !)' : ''}</p>` : ''}
+    ${up ? `<p class="pop" style="font-size:22px"><b>🎉 Niveau ${after.n} : ${after.emoji} ${esc(after.name)} !</b></p>` : ''}
+    <div style="text-align:left;margin:16px auto;max-width:460px">
+      <div class="lvl-name">${after.emoji} Niveau ${after.n} · ${esc(after.name)}</div>
+      <div class="xpbar"><div id="end-bar" style="width:${startPct}%"></div></div>
+      <p class="small mute" style="margin:6px 0 0">encore <b>${after.to - ST.xp} XP</b> pour ${after.next[1]} ${esc(after.next[2])}</p>
+    </div>
+    <div class="row" style="justify-content:center">${ring(dayXp, goal, 80)}
+      <p style="text-align:left">${dayXp >= goal ? `<b>⭐ Objectif du jour ${goalNow ? 'atteint !' : 'déjà atteint'}</b>` : `Objectif du jour : encore <b>${goal - dayXp} XP</b>`}</p></div>
+    ${r.badges.length ? `<h2>Nouveau${r.badges.length > 1 ? 'x' : ''} badge${r.badges.length > 1 ? 's' : ''} !</h2>
+      <div class="newbadges">${r.badges.map(([e, n], i) => `<div class="bdg pop" style="animation-delay:${.3 + i * .2}s"><div class="bdg-e">${e}</div><b class="small">${esc(n)}</b></div>`).join('')}</div>` : ''}
     <p class="mute">Les questions ratées reviendront demain.</p>
-    <div class="row" style="justify-content:center"><a class="btn" href="${S.back}">Retour</a><a class="btn pri" href="#/">Accueil</a></div></div>`);
+    <div class="row" style="justify-content:center"><a class="btn" href="${S.back}">Retour</a><a class="btn" href="#/progress">🏆 Mes progrès</a><a class="btn pri" href="#/">Accueil</a></div></div>`);
+  requestAnimationFrame(() => setTimeout(() => {
+    const bar = $('#end-bar'); if (bar) bar.style.width = Math.round(100 * (ST.xp - after.from) / (after.to - after.from)) + '%';
+  }, 150));
+  if (r.perfect || up || goalNow || r.badges.length) confetti();
+}
+function confetti() {
+  for (let i = 0; i < 36; i++) {
+    const c = document.createElement('span'); c.className = 'confetti';
+    c.textContent = ['🎉', '⭐', '✨', '🎊', '💫'][i % 5];
+    c.style.left = Math.random() * 100 + 'vw'; c.style.animationDelay = Math.random() * .8 + 's';
+    document.body.appendChild(c); setTimeout(() => c.remove(), 3600);
+  }
 }
 
 // --- Réglages
-let setProv = null;   // fournisseur affiché dans les réglages (pas encore forcément enregistré)
 async function viewSettings() {
-  const p = setProv ||= await KV.get('provider', 'gemini');
-  const key = await keyOf(p), model = await modelOf(p);
+  const name = await KV.get('name', ''), goal = await KV.get('goal', 50);
   let storage = '';
   try {
     const est = await navigator.storage.estimate(), persisted = await navigator.storage.persisted();
     storage = `${(est.usage / 1048576).toFixed(1)} Mo utilisés sur cet appareil · ${persisted ? 'stockage protégé ✅' : 'stockage non protégé (le navigateur pourrait le vider s\'il manque de place)'}`;
   } catch {}
-  const help = {
-    gemini: `<li>Ouvre <a href="${PROVIDERS.gemini.keyUrl}" target="_blank" rel="noopener">aistudio.google.com/apikey</a> avec un compte Google d'adulte, « Créer une clé API », copie-la.</li>
-      <li>Les nouvelles clés <code>AQ.</code> sont souvent refusées par Google (erreur 401) : dans ce cas, prends un autre fournisseur.</li>`,
-    openrouter: `<li>Crée un compte gratuit sur <a href="https://openrouter.ai" target="_blank" rel="noopener">openrouter.ai</a> (aucune carte bancaire nécessaire).</li>
-      <li>Ouvre <a href="${PROVIDERS.openrouter.keyUrl}" target="_blank" rel="noopener">Settings → Keys</a>, « Create Key », copie la clé (<code>sk-or-…</code>).</li>
-      <li>« Vérifier la clé » liste uniquement les modèles <b>gratuits</b> qui savent lire une photo. Environ 50 leçons par jour.</li>`,
-    groq: `<li>Crée un compte gratuit sur <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a>.</li>
-      <li>Ouvre <a href="${PROVIDERS.groq.keyUrl}" target="_blank" rel="noopener">API Keys</a>, « Create API Key », copie la clé (<code>gsk_…</code>).</li>`,
-    mistral: `<li>Crée un compte sur <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a> et choisis l'offre gratuite « Experiment » (vérification par SMS).</li>
-      <li>Ouvre <a href="${PROVIDERS.mistral.keyUrl}" target="_blank" rel="noopener">API Keys</a>, crée une clé, copie-la.</li>`,
-  }[p];
   setView(`<h1>⚙️ Réglages</h1>
   <div class="card">
-    <label for="s-prov" style="margin-top:0">Intelligence artificielle utilisée</label>
-    <select id="s-prov" onchange="act.pickProvider(this.value)">${Object.entries(PROVIDERS).map(([k, v]) =>
-      `<option value="${k}"${k === p ? ' selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
-    <ol class="small">${help}<li>Colle la clé ici. Elle reste uniquement sur cet appareil.</li></ol>
-    <label for="s-key">Clé</label>
-    <div class="row"><input type="password" id="s-key" value="${esc(key)}" autocomplete="off" style="flex:1">
-      <button class="btn" onclick="const i=$('#s-key');i.type=i.type==='password'?'text':'password'">👁️</button></div>
-    <label for="s-model">Modèle</label>
-    <select id="s-model">${model ? `<option>${esc(model)}</option>` : '<option value="">— vérifie la clé pour choisir —</option>'}</select>
-    <p id="s-check" class="small mute">Le bouton « Vérifier » teste la clé et liste les modèles disponibles.</p>
-    <div class="row"><button class="btn" id="s-verify" onclick="act.checkKey()">🔍 Vérifier</button><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
+    <label for="s-name" style="margin-top:0">Prénom <span class="mute small">(pour les messages d'encouragement)</span></label>
+    <input type="text" id="s-name" value="${esc(name)}" autocomplete="off">
+    <label for="s-goal">Objectif du jour</label>
+    <select id="s-goal">${[[30, 'Tranquille'], [50, 'Normal'], [80, 'Sérieux'], [120, 'Intense']].map(([v, t]) =>
+      `<option value="${v}"${v === goal ? ' selected' : ''}>${t} — ${v} XP (environ ${Math.max(1, Math.round(v / 60))} quiz)</option>`).join('')}</select>
+    <p class="small mute">Une bonne réponse rapporte ${XP_OK} XP, un quiz terminé ${XP_END} XP de bonus (le double sans faute).</p>
+    <div class="row"><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
   </div>
   <p class="small mute">${storage}</p>
   <p class="small mute">Version ${APP_VERSION}</p>`);
 }
-act.pickProvider = v => { setProv = v; viewSettings(); };
-async function storeKey(p, key, model) {
-  await KV.set(p === 'gemini' ? 'apiKey' : 'key:' + p, key);
-  if (model !== undefined) await KV.set(p === 'gemini' ? 'model' : 'model:' + p, model);
-}
-async function geminiModels() {
-  const data = await gemini('/models?pageSize=200');
-  const names = (data.models || [])
-    .filter(m => (m.supportedGenerationMethods || []).includes('generateContent'))
-    .map(m => m.name.replace(/^models\//, ''))
-    .filter(n => /^gemini/.test(n) && !/(tts|image|embedding|live|audio|robotics|computer|native)/.test(n));
-  const rank = n => (n === DEFAULT_MODEL ? 0 : /flash/.test(n) && !/lite|preview|exp/.test(n) ? 1 : /flash/.test(n) ? 2 : 3);
-  return names.sort((a, b) => rank(a) - rank(b) || b.localeCompare(a));
-}
-act.checkKey = async () => {
-  const p = setProv, out = $('#s-check');
-  await storeKey(p, $('#s-key').value.trim());
-  out.textContent = 'Vérification…';
-  try {
-    if (p === 'openrouter') {
-      // La liste des modèles d'OpenRouter est publique : seule /key prouve que la clé est valide.
-      const k = $('#s-key').value.replace(/\s+/g, '');
-      if (!/^sk-or-v1-[0-9a-f]{64}$/.test(k))
-        throw new ApiError(`Cette clé ne ressemble pas à une clé OpenRouter (attendu : « sk-or-v1- » suivi de 64 caractères, ici ${k.length} caractères au total au lieu de 73). Recopie-la en entier.`);
-      await oa(p, '/key');
-    }
-    const names = p === 'gemini' ? await geminiModels() : await oaModels(p);
-    if (p !== 'gemini') await KV.set('models:' + p, names);
-    if (!names.length) throw new ApiError('Clé acceptée, mais aucun modèle capable de lire une photo n\'est disponible.');
-    const cur = $('#s-model').value;
-    $('#s-model').innerHTML = names.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
-    out.textContent = `✅ Clé valide — ${names.length} modèle${names.length > 1 ? 's' : ''} disponible${names.length > 1 ? 's' : ''}. Celui proposé en premier convient.`;
-  } catch (e) { out.textContent = '❌ ' + e.message; }
-};
 act.saveSettings = async () => {
-  const p = setProv, key = $('#s-key').value.trim(), model = $('#s-model').value;
-  await storeKey(p, key, model);
-  await KV.set('provider', p);
-  setProv = null;
-  toast(`Réglages enregistrés (${PROVIDERS[p].label})`);
-  go('#/');
+  const name = $('#s-name').value.trim(), goal = +$('#s-goal').value;
+  await KV.set('name', name); await KV.set('goal', goal);
+  toast('Réglages enregistrés'); go('#/');
 };
 
 // ---------- Routeur ----------
-const routes = { '': viewHome, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
+const routes = { '': viewHome, progress: viewProgress, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
 async function route() {
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
   if (name !== 'play') window.speechSynthesis?.cancel();
@@ -1152,7 +1131,7 @@ async function checkUpdate() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 renderStreak();
-route();
+loadStats().then(route);
 checkUpdate();
 </script>
 </body>
