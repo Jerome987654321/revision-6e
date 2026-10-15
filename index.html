@@ -107,7 +107,8 @@ textarea{resize:vertical}
   padding:10px 18px;border-radius:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:30;max-width:90vw}
 #toast.on{opacity:1}
 .big-emoji{font-size:72px;text-align:center;margin:10px 0}
-body.locked header .streak, body.locked header .gear{visibility:hidden}
+body.locked header .streak, body.locked header .gear, body.locked header .sync{visibility:hidden}
+header .sync{font-size:20px}
 body.locked header .logo{pointer-events:none}
 .lock{max-width:460px;margin:24px auto}
 .pin-dots{display:flex;gap:18px;justify-content:center;margin:18px 0 22px}
@@ -164,6 +165,7 @@ body.locked header .logo{pointer-events:none}
 <body>
 <header>
   <a class="logo" href="#/">📚 Révisions 6e</a>
+  <span class="sync" id="sync"></span>
   <span class="streak" id="streak"></span>
   <a class="gear" href="#/settings" aria-label="Réglages">⚙️</a>
 </header>
@@ -179,7 +181,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -209,13 +211,17 @@ async function tx(store, mode, fn) {
 const Lessons = {
   all: () => tx('lessons', 'readonly', s => s.getAll()),
   get: id => tx('lessons', 'readonly', s => s.get(id)),
-  put: l => tx('lessons', 'readwrite', s => s.put(l)),
-  del: id => tx('lessons', 'readwrite', s => s.delete(id)),
+  put: (l, fromSync) => { if (!fromSync) { l.updatedAt = Date.now(); markDirty('l', l.id); } return tx('lessons', 'readwrite', s => s.put(l)); },
+  del: (id, fromSync) => { if (!fromSync) markDirty('l', id); return tx('lessons', 'readwrite', s => s.delete(id)); },
 };
 const KV = {
   async get(k, def) { const r = await tx('kv', 'readonly', s => s.get(k)); return r ? r.v : def; },
-  set: (k, v) => tx('kv', 'readwrite', s => s.put({ k, v })),
+  set: (k, v, fromSync) => {
+    if (META_KEYS.has(k) && !fromSync) { tx('kv', 'readwrite', s => s.put({ k: 'metaAt', v: Date.now() })); markDirty('m'); }
+    return tx('kv', 'readwrite', s => s.put({ k, v }));
+  },
 };
+const META_KEYS = new Set(['stats', 'streak', 'goal', 'name']);   // progrès et réglages qui suivent le compte
 
 // ---------- Utilitaires ----------
 function today() { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000); }
@@ -346,14 +352,30 @@ async function loadPending() {
 }
 const matOptions = cur => ['auto', ...MATIERES].map(m =>
   `<option value="${esc(m)}"${m === cur ? ' selected' : ''}>${m === 'auto' ? 'Détecter automatiquement' : esc(m)}</option>`).join('');
+// Images reçues par « Partager → Révisions 6e » (le service worker les dépose dans le stockage de l'app).
+async function takeShared() {
+  const shared = await KV.get('shared', null);
+  if (!shared?.length) return 0;
+  await KV.set('shared', null);
+  let n = 0;
+  for (const b of shared) {
+    if (pending.length >= MAX_PHOTOS) { toast(`Maximum ${MAX_PHOTOS} pages par leçon`); break; }
+    try { pending.push(await compress(b)); n++; } catch {}
+  }
+  await savePending();
+  return n;
+}
 async function viewNew() {
   await loadPending();
+  const got = await takeShared();
+  if (got) toast(`${got} image${got > 1 ? 's' : ''} reçue${got > 1 ? 's' : ''} 📥`);
   setView(`<h1>📷 Nouvelle leçon</h1>
   <div class="card">
-    <p class="mute small">Une photo par page, bien à plat, avec de la lumière et sans reflet. Jusqu'à ${MAX_PHOTOS} pages.</p>
+    <p class="mute small">Une photo par page, bien à plat, avec de la lumière et sans reflet, ou des captures d'écran (ENT, manuel numérique…). Jusqu'à ${MAX_PHOTOS} pages.
+      <br>Depuis une capture ou la galerie Android : <b>Partager → Révisions 6e</b>. Sur ordinateur : colle une capture avec <b>Ctrl+V</b>.</p>
     <div class="row">
       <label class="btn pri filebtn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" onchange="act.addFiles(this)"></label>
-      <label class="btn filebtn">🖼️ Choisir des images<input type="file" accept="image/*" multiple onchange="act.addFiles(this)"></label>
+      <label class="btn filebtn">🖼️ Photos ou captures d'écran<input type="file" accept="image/*" multiple onchange="act.addFiles(this)"></label>
       <a class="btn" href="#/photos">🗂️ Photos déjà prises</a>
     </div>
     <div class="thumbs">${pending.map((b, i) => `<div class="thumb"><img src="${urlOf(b)}" alt="Page ${i + 1}"><button onclick="act.rmPhoto(${i})" aria-label="Retirer">✕</button></div>`).join('')}</div>
@@ -378,6 +400,12 @@ act.addFiles = async input => {
   await savePending();
   viewNew();
 };
+document.addEventListener('paste', ev => {     // capture d'écran collée (Ctrl+V) sur la page Nouvelle leçon
+  if (!location.hash.startsWith('#/new') || document.body.classList.contains('locked')) return;
+  const files = [...(ev.clipboardData?.items || [])].filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+  if (!files.length) return;
+  ev.preventDefault(); act.addFiles({ files });
+});
 act.rmPhoto = async i => { pending.splice(i, 1); await savePending(); viewNew(); };
 act.makePackage = async () => {
   const l = { id: uid(), createdAt: Date.now(), status: 'package', matiere: pendingMat === 'auto' ? 'À classer' : pendingMat,
@@ -438,7 +466,7 @@ function packagePrompt(l) {
 - Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé avec toutes les réponses.
 - Uniquement du Markdown simple : titres, listes, gras, tableaux. Pas d'image ni de HTML.`);
   return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
-Les photos jointes sont les pages d'une leçon (cahier, manuel ou fiche), dans l'ordre.
+Les images jointes sont les pages d'une leçon (photos du cahier, du manuel ou d'une fiche, ou captures d'écran), dans l'ordre.
 Matière : ${mat}.${l.titreAuto ? '' : `\nTitre de la leçon : ${l.titre}.`}
 
 Règles :
@@ -1112,8 +1140,21 @@ async function viewSettings() {
     <div class="row"><button class="btn" onclick="act.changePin()">Changer le code secret</button>
       <button class="btn" onclick="act.changeParent()">Changer le code parent de secours</button></div>
   </div>
+  ${await accountCard()}
   <p class="small mute">${storage}</p>
   <p class="small mute">Version ${APP_VERSION}</p>`);
+}
+async function accountCard() {
+  const info = await serverInfo(true), session = await KV.get('session', ''), at = await KV.get('syncAt', 0);
+  const d = await loadDirty(), waiting = Object.keys(d.lessons).length + (d.meta ? 1 : 0);
+  const body = !info ? '<p>Serveur injoignable (pas de connexion ?). Tout reste sur l\'appareil et partira dans le compte au retour de la connexion.</p>'
+    : !info.account ? `<p>Pas encore activé : les leçons et les progrès restent sur cet appareil.</p>
+      <button class="btn pri" onclick="act.activate()">☁️ Activer le compte en ligne</button>`
+    : session ? `<p>✅ Cet appareil est connecté au compte. ${at ? `Dernière synchronisation : ${new Date(at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}.` : ''}
+      ${waiting ? `<br>${waiting} modification(s) en attente d'envoi.` : ''}</p>
+      <button class="btn" onclick="act.syncNow()">🔄 Synchroniser maintenant</button>`
+    : '<p>Le compte existe, mais cet appareil n\'est pas encore connecté : il le sera au prochain déverrouillage avec le code secret.</p>';
+  return `<div class="card"><h2 style="margin-top:0">☁️ Compte en ligne</h2>${body}</div>`;
 }
 act.saveSettings = async () => {
   const name = $('#s-name').value.trim(), goal = +$('#s-goal').value;
@@ -1121,9 +1162,124 @@ act.saveSettings = async () => {
   toast('Réglages enregistrés'); go('#/');
 };
 
+// --- Compte en ligne : les leçons et les progrès d'Eden suivent son compte (Netlify) ; une copie reste sur l'appareil
+// pour l'utiliser sans connexion. Envoi des modifications, puis récupération de ce qui a changé ailleurs ;
+// en cas de conflit, la modification la plus récente l'emporte (un seul utilisateur).
+const NETLIFY_HOST = 'revisions-6e-fa03df.netlify.app';
+let API_URL = '';
+async function apiBase() {     // l'API du site qui sert l'app si elle existe (Netlify), sinon celle du site Netlify
+  if (API_URL) return API_URL;
+  try {
+    const r = await fetch(location.origin + '/api/health', { cache: 'no-store' });
+    if (r.ok && (r.headers.get('content-type') || '').includes('json')) return API_URL = location.origin + '/api';
+  } catch {}
+  return API_URL = `https://${NETLIFY_HOST}/api`;
+}
+let online = null, dirtyP = null, syncTimer = null, syncing = false, lastPin = '', resetParent = null;
+async function api(method, path, body, raw) {
+  const token = await KV.get('session', ''), headers = {};
+  if (token) headers.authorization = 'Bearer ' + token;
+  if (body !== undefined && !raw) headers['content-type'] = 'application/json';
+  const res = await fetch((await apiBase()) + path, { method, headers, cache: 'no-store',
+    body: body === undefined ? undefined : raw ? body : JSON.stringify(body) });
+  const type = res.headers.get('content-type') || '';
+  const data = type.includes('json') ? await res.json().catch(() => null) : res.ok ? await res.blob() : null;
+  if (res.status === 401 && token && !['/login', '/reset', '/setup'].includes(path)) await KV.set('session', '');
+  return { status: res.status, ok: res.ok, data };
+}
+async function serverInfo(force) {
+  if (online !== null && !force) return online;
+  try { const r = await fetch((await apiBase()) + '/health', { cache: 'no-store' }); online = r.ok ? await r.json() : false; }
+  catch { online = false; }
+  return online;
+}
+const loadDirty = () => dirtyP ||= KV.get('dirty', { lessons: {}, meta: 0 }).then(d => ({ lessons: {}, meta: 0, ...d }));
+function markDirty(kind, id) {
+  loadDirty().then(d => { if (kind === 'l') d.lessons[id] = Date.now(); else d.meta = Date.now(); KV.set('dirty', d); scheduleSync(); });
+}
+function scheduleSync(delay = 2500) { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, delay); }
+function setSync(state) {
+  const el = $('#sync'); if (!el) return;
+  el.textContent = { ok: '☁️', run: '🔄', err: '⚠️', off: '' }[state];
+  el.title = { ok: 'Enregistré dans le compte', run: 'Synchronisation…', err: 'Synchronisation en attente (pas de connexion ?)', off: '' }[state];
+}
+const strip = l => { const { photos, files, _up, _synced, ...rest } = l; return { ...rest, nPhotos: (photos || []).length }; };
+async function localMeta() {
+  return { at: await KV.get('metaAt', Date.now()), stats: await loadStats(), streak: await KV.get('streak', null),
+    goal: await KV.get('goal', 50), name: await KV.get('name', '') };
+}
+async function applyMeta(m) {
+  ST = m.stats; await KV.set('stats', m.stats, true);
+  if (m.streak) await KV.set('streak', m.streak, true);
+  if (m.goal) await KV.set('goal', m.goal, true);
+  if (m.name) await KV.set('name', m.name, true);
+  await KV.set('metaAt', m.at || Date.now()); renderStreak();
+}
+async function pushLesson(id) {
+  const l = await Lessons.get(id);
+  if (!l) { const r = await api('DELETE', '/lesson/' + id); return r.ok || r.status === 404; }
+  for (let i = l._up || 0; i < (l.photos || []).length; i++) if (!(await api('PUT', `/photo/${id}/${i}`, l.photos[i], true)).ok) return false;
+  const r = await api('PUT', '/lesson/' + id, strip(l));
+  if (!r.ok && r.status !== 409) return false;           // 409 : le compte a une version plus récente, récupérée juste après
+  const cur = await Lessons.get(id);
+  if (cur) { cur._up = (l.photos || []).length; cur._synced = true; await Lessons.put(cur, true); }
+  return true;
+}
+async function firstLink() {      // première connexion de cet appareil : tout ce qu'il contient part dans le compte
+  if (await KV.get('linked', false)) return;
+  const d = await loadDirty();
+  for (const l of await Lessons.all()) d.lessons[l.id] ||= Date.now();
+  const r = await api('GET', '/meta').catch(() => null), remote = r?.ok && r.data?.stats ? r.data : null;
+  if (remote && remote.stats.xp >= (await loadStats()).xp) await applyMeta(remote); else d.meta = Date.now();
+  await KV.set('dirty', d); await KV.set('linked', true);
+}
+async function syncNow() {
+  clearTimeout(syncTimer);
+  if (syncing || !unlocked || !(await KV.get('session', ''))) return;
+  if (!(await serverInfo(online === false))) return setSync('err');
+  syncing = true; setSync('run');
+  try {
+    const d = await loadDirty();
+    for (const [id, v] of Object.entries(d.lessons)) {
+      if (!(await pushLesson(id))) throw new Error('envoi');
+      if (d.lessons[id] === v) delete d.lessons[id];
+    }
+    if (d.meta) {
+      const v = d.meta, r = await api('PUT', '/meta', await localMeta());
+      if (!r.ok) throw new Error('progrès');
+      if (d.meta === v) d.meta = 0;
+    }
+    await KV.set('dirty', d);
+    const idx = await api('GET', '/index'); if (!idx.ok) throw new Error('index');
+    const local = new Map((await Lessons.all()).map(l => [l.id, l]));
+    let changed = false;
+    for (const [id, at] of Object.entries(idx.data.lessons || {})) {
+      const loc = local.get(id);
+      if (d.lessons[id] || (loc && (loc.updatedAt || 0) >= at)) continue;
+      const r = await api('GET', '/lesson/' + id); if (!r.ok) continue;
+      const { nPhotos = 0, ...remote } = r.data;
+      let photos = loc?.photos?.length === nPhotos ? loc.photos : [];
+      if (photos.length !== nPhotos) for (let i = 0; i < nPhotos; i++) { const p = await api('GET', `/photo/${id}/${i}`); if (p.ok) photos.push(p.data); }
+      await Lessons.put({ ...remote, photos, files: loc?.files || [], _up: photos.length, _synced: true }, true);
+      changed = true;
+    }
+    for (const [id, loc] of local) if (loc._synced && !(id in (idx.data.lessons || {})) && !d.lessons[id]) { await Lessons.del(id, true); changed = true; }
+    if ((idx.data.metaAt || 0) > (await KV.get('metaAt', 0)) && !d.meta) {
+      const r = await api('GET', '/meta'); if (r.ok && r.data?.stats) { await applyMeta(r.data); changed = true; }
+    }
+    await KV.set('syncAt', Date.now());
+    setSync('ok');
+    if (changed && !location.hash.startsWith('#/play') && !document.body.classList.contains('locked')) route();
+  } catch { setSync('err'); scheduleSync(30000); }
+  finally { syncing = false; }
+}
+window.addEventListener('online', () => { online = null; scheduleSync(500); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(800); });
+
 // --- Verrou : code secret à 4 chiffres pour un seul enfant
-// Le code n'est jamais stocké : seule son empreinte PBKDF2 (sel aléatoire) est gardée sur l'appareil.
-// Un code parent de secours, choisi par le parent (6 caractères ou plus), permet d'en choisir un nouveau en cas d'oubli.
+// Avec le compte en ligne, le code est vérifié par le serveur (blocage commun à tous les appareils) ;
+// sans connexion, par son empreinte PBKDF2 gardée sur l'appareil. Le code n'est jamais stocké en clair.
+// Le code parent de secours (choisi par le parent, 6 caractères ou plus) permet d'en choisir un nouveau.
 const LOCK_AFTER = 5 * 60 * 1000;          // verrouille après 5 min en arrière-plan
 const PIN_ITER = 150000;
 let unlocked = false, hiddenAt = 0, pinBuf = '', lockMode = 'unlock', firstPin = '', lockTimer = null;
@@ -1140,20 +1296,23 @@ const PARENT_MIN = 6;
 function setLocked(on) { document.body.classList.toggle('locked', on); }
 async function viewLock() {
   setLocked(true);
-  const lock = await KV.get('lock', null), name = await KV.get('name', '') || 'Eden';
-  if (!lock && lockMode === 'unlock') lockMode = 'setup1';
+  const lock = await KV.get('lock', null), name = await KV.get('name', '') || 'Eden', info = await serverInfo();
+  if (!lock && lockMode === 'unlock' && !info?.account) lockMode = 'setup1';
+  const activation = lockMode === 'parent' && info && !info.account;
   const wait = lock?.until && lock.until > Date.now() ? Math.ceil((lock.until - Date.now()) / 1000) : 0;
   const lv = ST ? levelOf(ST.xp) : null;
-  const title = {
+  const title = activation ? '☁️ Activer le compte en ligne' : {
     unlock: `Bonjour ${esc(name)} 👋`, setup1: lock ? 'Nouveau code secret' : `Le code secret ${esc(deName(name))}`,
     setup2: 'Encore une fois, pour vérifier', rescue: 'Code parent de secours', parent: '🗝️ Code parent de secours',
   }[lockMode];
-  const sub = {
-    unlock: wait ? `Trop d'essais : attends <b id="lock-wait">${wait}</b> s` : 'Tape ton code secret',
-    setup1: 'Choisis 4 chiffres faciles à retenir pour toi, et que personne d\'autre ne connaît.',
-    setup2: 'Tape le même code.', rescue: 'Le code choisi par le parent quand le code secret a été créé.',
-    parent: `À choisir par un parent (${PARENT_MIN} caractères ou plus : lettres, chiffres…). Il permet de choisir un nouveau code secret si ${esc(name)} oublie le sien. Garde-le pour toi.`,
-  }[lockMode];
+  const sub = activation
+    ? `À faire par un parent : choisis le code parent (${PARENT_MIN} caractères ou plus) et tape le code d'activation. Les leçons et les progrès ${esc(deName(name))} seront gardés dans son compte et retrouvés sur ses autres appareils.`
+    : {
+      unlock: wait ? `Trop d'essais : attends <b id="lock-wait">${wait}</b> s` : 'Tape ton code secret',
+      setup1: 'Choisis 4 chiffres faciles à retenir pour toi, et que personne d\'autre ne connaît.',
+      setup2: 'Tape le même code.', rescue: 'Le code choisi par le parent quand le code secret a été créé.',
+      parent: `À choisir par un parent (${PARENT_MIN} caractères ou plus : lettres, chiffres…). Il permet de choisir un nouveau code secret si ${esc(name)} oublie le sien. Garde-le pour toi.`,
+    }[lockMode];
   let body;
   const eye = id => `<button type="button" class="btn" onclick="const i=$('#${id}');i.type=i.type==='password'?'text':'password'">👁️</button>`;
   if (lockMode === 'rescue') body = `<form onsubmit="act.rescue(event)" style="max-width:360px;margin:0 auto">
@@ -1164,21 +1323,32 @@ async function viewLock() {
       <div class="row"><input type="password" id="pa-1" autocomplete="new-password" autocapitalize="off" style="flex:1;font-size:20px">${eye('pa-1')}</div>
       <label for="pa-2">Encore une fois</label>
       <div class="row"><input type="password" id="pa-2" autocomplete="new-password" autocapitalize="off" style="flex:1;font-size:20px">${eye('pa-2')}</div>
+      ${activation ? `<label for="pa-act">Code d'activation</label>
+      <input type="text" id="pa-act" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX" style="font-size:20px;letter-spacing:2px">` : ''}
       <div class="row" style="justify-content:center;margin-top:14px">
-        ${lock?.rescue ? '<button type="button" class="btn" onclick="act.cancelPin()">Annuler</button>' : ''}<button class="btn pri">Enregistrer</button></div></form>`;
+        ${activation && !unlocked ? '<button type="button" class="btn" onclick="act.later()">Plus tard</button>' : ''}
+        ${lock?.rescue && unlocked ? '<button type="button" class="btn" onclick="act.cancelPin()">Annuler</button>' : ''}<button class="btn pri">${activation ? 'Activer' : 'Enregistrer'}</button></div></form>`;
   else body = `<div class="pin-dots" id="pin-dots">${[0, 1, 2, 3].map(i => `<span class="${i < pinBuf.length ? 'on' : ''}"></span>`).join('')}</div>
     <div class="keypad${wait ? ' off' : ''}">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map(k =>
       k ? `<button class="key" onclick="act.key('${k}')">${k}</button>` : '<span></span>').join('')}</div>
     ${lockMode === 'unlock' ? '<button class="btn" style="margin-top:18px" onclick="lockMode=\'rescue\';pinBuf=\'\';viewLock()">Code oublié ?</button>' : ''}
     ${lockMode !== 'unlock' && unlocked ? '<button class="btn" style="margin-top:18px" onclick="act.cancelPin()">Annuler</button>' : ''}`;
   setView(`<div class="lock center">
-    <div class="big-emoji">${lockMode === 'unlock' ? (lv ? lv.emoji : '🔒') : '🔐'}</div>
+    <div class="big-emoji">${activation ? '☁️' : lockMode === 'unlock' ? (lv ? lv.emoji : '🔒') : '🔐'}</div>
     <h1>${title}</h1><p class="mute">${sub}</p>${body}</div>`);
   clearInterval(lockTimer);
   if (wait) lockTimer = setInterval(() => {
     const el = $('#lock-wait'); if (!el) return clearInterval(lockTimer);
     const s = +el.textContent - 1; if (s <= 0) { clearInterval(lockTimer); viewLock(); } else el.textContent = s;
   }, 1000);
+}
+const shakeAndRetry = () => { const dots = $('#pin-dots'); dots?.classList.add('shake'); setTimeout(() => viewLock(), 450); };
+async function onlineUnlocked(pin, token) {   // code accepté par le serveur : cet appareil est connecté au compte
+  const lock = await KV.get('lock', null);
+  await KV.set('session', token);
+  await KV.set('lock', { ...(lock || {}), ...(await sealed(pin)), fails: 0, until: 0 });
+  lastPin = pin; online = { ok: true, account: true };
+  await firstLink(); lockMode = 'unlock'; finishUnlock();
 }
 act.key = async k => {
   if ($('.keypad.off')) return;
@@ -1189,47 +1359,91 @@ act.key = async k => {
   if (lockMode === 'setup1') { firstPin = pin; lockMode = 'setup2'; return viewLock(); }
   if (lockMode === 'setup2') {
     if (pin !== firstPin) { lockMode = 'setup1'; toast('Les deux codes sont différents, recommence'); return viewLock(); }
+    firstPin = '';
+    if (resetParent !== null) {          // code oublié, compte en ligne : le serveur vérifie le code parent
+      const parent = resetParent; resetParent = null;
+      const r = await api('POST', '/reset', { parent, pin }).catch(() => null);
+      if (r?.ok) { const l = await KV.get('lock', null); await KV.set('lock', { ...(l || {}), rescue: await sealed(parent) }); toast('Nouveau code enregistré 🔒'); return onlineUnlocked(pin, r.data.token); }
+      lockMode = 'rescue';
+      toast(r?.status === 423 ? `Trop d'essais : attends ${r.data.wait} s` : r ? 'Code parent incorrect' : 'Pas de connexion internet');
+      return viewLock();
+    }
     const old = await KV.get('lock', null);
+    if (old && unlocked && (await KV.get('session', ''))) {       // changement de code : aussi dans le compte
+      const r = await api('POST', '/pin', { pin }).catch(() => null);
+      if (!r?.ok) { toast('Code non changé : il faut une connexion internet'); return act.cancelPin(); }
+    }
     await KV.set('lock', { ...(await sealed(pin)), rescue: old?.rescue || null, fails: 0, until: 0 });
     if (!(await KV.get('name', ''))) await KV.set('name', 'Eden');
-    firstPin = '';
+    lastPin = pin;
     if (!old?.rescue) { lockMode = 'parent'; return viewLock(); }   // première création : le parent choisit son code
     lockMode = 'unlock'; toast('Nouveau code enregistré 🔒'); return finishUnlock();
   }
-  // déverrouillage
-  const lock = await KV.get('lock', null);
+  // déverrouillage : par le serveur si le compte en ligne existe, sinon sur l'appareil
+  const lock = await KV.get('lock', null), info = await serverInfo(true);
+  if (info?.account) {
+    const r = await api('POST', '/login', { pin }).catch(() => null);
+    if (r?.ok) return onlineUnlocked(pin, r.data.token);
+    if (r && (r.status === 401 || r.status === 423)) {
+      if (r.data?.wait) await KV.set('lock', { ...(lock || {}), until: Date.now() + r.data.wait * 1000 });
+      return shakeAndRetry();
+    }
+  }
+  if (!lock) { toast('Connexion internet nécessaire pour la première ouverture sur cet appareil'); return viewLock(); }
   if (await matches(pin, lock)) {
-    lock.fails = 0; lock.until = 0; await KV.set('lock', lock);
+    lock.fails = 0; lock.until = 0; await KV.set('lock', lock); lastPin = pin;
     if (!lock.rescue) { lockMode = 'parent'; return viewLock(); }    // code parent pas encore choisi
+    if (info && !info.account && !(await KV.get('activateLater', false))) { lockMode = 'parent'; return viewLock(); }   // proposer le compte en ligne
     return finishUnlock();
   }
   lock.fails = (lock.fails || 0) + 1;
   if (lock.fails >= 5) lock.until = Date.now() + Math.min(15 * 60, 30 * 2 ** (lock.fails - 5)) * 1000;   // 30 s, 1 min, 2 min… 15 min max
   await KV.set('lock', lock);
-  const dots = $('#pin-dots'); dots.classList.add('shake'); setTimeout(() => viewLock(), 450);
+  shakeAndRetry();
 };
 act.saveParent = async ev => {
   ev.preventDefault();
-  const a = $('#pa-1').value.trim(), b = $('#pa-2').value.trim();
+  const a = $('#pa-1').value.trim(), b = $('#pa-2').value.trim(), act8 = skipActivation ? null : $('#pa-act');
   if (a.length < PARENT_MIN) return toast(`Le code parent doit faire au moins ${PARENT_MIN} caractères`);
   if (a !== b) return toast('Les deux codes parent sont différents');
+  if (act8) {                                         // activation du compte en ligne
+    if (!lastPin) { lockMode = 'unlock'; toast('Retape d\'abord le code secret'); return viewLock(); }
+    const r = await api('POST', '/setup', { pin: lastPin, parent: a, token: act8.value.trim().toUpperCase() }).catch(() => null);
+    if (!r?.ok) return toast(r?.status === 403 ? 'Code d\'activation incorrect' : r?.status === 409 ? 'Le compte existe déjà : déverrouille avec le code secret' : 'Pas de connexion internet');
+    await KV.set('session', r.data.token); online = { ok: true, account: true };
+  } else if (unlocked && (await KV.get('session', ''))) {
+    const r = await api('POST', '/parent', { parent: a }).catch(() => null);
+    if (!r?.ok) return toast('Code parent non changé : il faut une connexion internet');
+  }
   const lock = await KV.get('lock', null);
   lock.rescue = await sealed(a); await KV.set('lock', lock);
-  lockMode = 'unlock'; toast('Code parent enregistré 🗝️'); finishUnlock();
+  if (act8) await firstLink();
+  lockMode = 'unlock'; toast(act8 ? 'Compte en ligne activé ☁️' : 'Code parent enregistré 🗝️'); finishUnlock();
 };
-async function finishUnlock() { unlocked = true; setLocked(false); renderStreak(); route(); }
+let skipActivation = false;
+act.later = async () => {     // sans compte en ligne pour l'instant (activable ensuite dans les réglages)
+  await KV.set('activateLater', true);
+  if ((await KV.get('lock', null))?.rescue) { lockMode = 'unlock'; return finishUnlock(); }
+  skipActivation = true; await act.saveParent({ preventDefault() {} }); skipActivation = false;
+};
+act.activate = () => { if (!lastPin) return toast('Déverrouille d\'abord l\'app avec le code secret'); lockMode = 'parent'; viewLock(); };
+async function finishUnlock() { unlocked = true; setLocked(false); renderStreak(); route(); scheduleSync(300); }
 act.cancelPin = () => { lockMode = 'unlock'; pinBuf = ''; firstPin = ''; setLocked(false); go('#/settings'); };
 act.rescue = async ev => {
   ev.preventDefault();
-  const lock = await KV.get('lock', null), code = $('#r-code').value.trim();
-  if (lock?.until > Date.now()) return toast('Trop d\'essais : attends un peu');
-  if (code && await matches(code, lock?.rescue)) { lock.fails = 0; lock.until = 0; await KV.set('lock', lock); lockMode = 'setup1'; pinBuf = ''; return viewLock(); }
+  const lock = await KV.get('lock', null), code = $('#r-code').value.trim(), info = await serverInfo(true);
+  if (!code) return;
+  if (info?.account) { resetParent = code; lockMode = 'setup1'; pinBuf = ''; return viewLock(); }   // vérifié par le serveur à la fin
+  if (!lock) return toast('Connexion internet nécessaire');
+  if (lock.until > Date.now()) return toast('Trop d\'essais : attends un peu');
+  if (await matches(code, lock.rescue)) { lock.fails = 0; lock.until = 0; await KV.set('lock', lock); lockMode = 'setup1'; pinBuf = ''; return viewLock(); }
   lock.fails = (lock.fails || 0) + 1;
   if (lock.fails >= 5) lock.until = Date.now() + Math.min(15 * 60, 30 * 2 ** (lock.fails - 5)) * 1000;
   await KV.set('lock', lock); toast('Code de secours incorrect');
 };
 act.changePin = () => { lockMode = 'setup1'; pinBuf = ''; viewLock(); };
 act.changeParent = () => { lockMode = 'parent'; viewLock(); };
+act.syncNow = async () => { toast('Synchronisation…'); await syncNow(); toast('Synchronisé ☁️'); viewSettings(); };
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') hiddenAt = Date.now();
   else if (unlocked && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER) { unlocked = false; lockMode = 'unlock'; pinBuf = ''; viewLock(); }

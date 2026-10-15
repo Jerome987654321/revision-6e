@@ -13,8 +13,20 @@ Aucune clé d'API : la génération se fait dans ChatGPT, avec l'abonnement de l
 | Fichier | Rôle |
 |---|---|
 | `index.html` | toute l'application (HTML, CSS, JS) |
-| `sw.js` | fonctionnement hors ligne |
+| `sw.js` | fonctionnement hors ligne, réception des images partagées (Android) |
 | `manifest.webmanifest`, `icon*.png`, `icon.svg` | installation comme une app |
+| `netlify/functions/api.mjs` | compte en ligne d'Eden : code vérifié par le serveur, leçons, photos et progrès dans Netlify Blobs |
+| `netlify.toml`, `scripts/build.mjs` | déploiement Netlify (`dist/` ne contient que l'application) |
+| `scripts/dev-server.mjs` | banc d'essai local avec le simulateur de Netlify Blobs |
+
+## Compte en ligne (Netlify)
+
+- Site : https://revisions-6e-fa03df.netlify.app — déploiement : `netlify deploy --build --prod`.
+- Variables d'environnement du site : `SETUP_TOKEN` (code d'activation, utile une seule fois) et
+  `ALLOWED_ORIGINS` (autres adresses de l'app autorisées à appeler l'API).
+- Le code à 4 chiffres et le code parent ne sont stockés que sous forme d'empreinte PBKDF2 ; 5 erreurs
+  bloquent le compte de 30 s à 15 min. Chaque appareil connecté garde une copie et se synchronise.
+- Test local : `node scripts/build.mjs && SETUP_TOKEN=TEST-1234 node scripts/dev-server.mjs` puis http://localhost:8890.
 
 ## Publier (une seule fois) — GitHub Pages
 
