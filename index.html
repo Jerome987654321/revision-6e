@@ -124,6 +124,13 @@ textarea{resize:vertical}
 .fb{border-radius:14px;padding:14px;margin:14px 0;font-size:19px}
 .fb.ok{background:var(--ok-bg)} .fb.ko{background:var(--ko-bg)}
 .blank{display:inline-block;min-width:90px;border-bottom:3px solid var(--pri);text-align:center;color:var(--pri)}
+.qtable{border-collapse:collapse;margin:8px 0 16px;font-size:20px}
+.qtable td,.qtable th{border:2px solid var(--line);padding:8px 14px;text-align:center;min-width:56px}
+.qtable th{background:var(--soft);text-align:left;font-weight:700}
+.qtable .blank{min-width:48px}
+.choices .btn .qtable{margin:2px 0;font-size:17px}
+.fb .qtable{font-size:17px;margin:8px 0}
+.flash .qtable{margin:14px auto 0;font-size:20px}
 .speak{border:0;background:none;font-size:24px;cursor:pointer;vertical-align:middle}
 .resume li{margin:10px 0;font-size:20px}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;display:flex;align-items:center;justify-content:center}
@@ -206,8 +213,27 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
+// Tableaux dans les questions et les choix : une liste de rangées, la première case de chaque rangée est son intitulé.
+function cleanTable(t) {
+  if (!Array.isArray(t)) return null;
+  const rows = t.filter(Array.isArray).slice(0, 6).map(r => r.slice(0, 10).map(c => String(c ?? '').trim().replace(/^_{2,}$/, '___')));
+  return rows.length && rows.some(r => r.length > 1) ? rows : null;
+}
+function tableHtml(rows, fill) {   // fill : la réponse à montrer à la place de « ___ » une fois la question jouée
+  const isLabel = c => c && isNaN(+c.replace(',', '.')) && c !== '___';
+  return `<table class="qtable">${rows.map(r => `<tr>${r.map((c, i) => {
+    const cell = c === '___' || c === '?' ? `<span class="blank">${fill ? esc(fill) : '?'}</span>` : esc(c);
+    return i === 0 && isLabel(c) ? `<th>${cell}</th>` : `<td>${cell}</td>`;
+  }).join('')}</tr>`).join('')}</table>`;
+}
+const tableText = rows => (rows || []).map(r => r.join(' | ')).join('\n');
+const parseTable = txt => { const rows = String(txt).split('\n').map(l => l.split('|').map(c => c.trim().replace(/^_{2,}$/, '___'))).filter(r => r.some(Boolean)); return rows.length ? rows : null; };
+const isTableChoice = c => !!(c && typeof c === 'object' && c.tableau);
+const choiceHtml = c => isTableChoice(c) ? tableHtml(c.tableau) : esc(c);
+const hasBlank = it => (it.tableau || []).some(r => r.includes('___'));
+const longAnswer = t => String(t).trim().split(/\s+/).length > 4;   // une phrase : à choisir ou à comparer, pas à écrire
 
 // ---------- Stockage local (IndexedDB) ----------
 let dbp;
@@ -312,16 +338,17 @@ function parseJsonText(text) {
 function toLesson(r, blobs, matiere) {
   const s = v => String(v ?? '').trim();
   const items = [];
-  for (const c of r.flashcards || []) if (s(c.recto) && s(c.verso)) items.push({ type: 'card', recto: s(c.recto), verso: s(c.verso) });
+  for (const c of r.flashcards || []) if (s(c.recto) && s(c.verso)) items.push({ type: 'card', recto: s(c.recto), verso: s(c.verso), tableau: cleanTable(c.tableau) });
   for (const q of r.qcm || []) {
-    const choix = (q.choix || []).map(s).filter(Boolean); const b = Number(q.bonne);
+    const choix = (q.choix || []).map(c => c && typeof c === 'object' ? (cleanTable(c.tableau) ? { tableau: cleanTable(c.tableau) } : '') : s(c)).filter(Boolean);
+    const b = Number(q.bonne);
     if (s(q.question) && choix.length >= 2 && b >= 0 && b < choix.length)
-      items.push({ type: 'qcm', question: s(q.question), choix, bonne: b, explication: s(q.explication) });
+      items.push({ type: 'qcm', question: s(q.question), tableau: cleanTable(q.tableau), choix, bonne: b, explication: s(q.explication) });
   }
-  for (const v of r.vrai_faux || []) if (s(v.affirmation)) items.push({ type: 'vf', affirmation: s(v.affirmation), vrai: !!v.vrai, correction: s(v.correction) });
+  for (const v of r.vrai_faux || []) if (s(v.affirmation)) items.push({ type: 'vf', affirmation: s(v.affirmation), tableau: cleanTable(v.tableau), vrai: !!v.vrai, correction: s(v.correction) });
   for (const t of r.trous || []) {
-    const phrase = s(t.phrase).replace(/_{2,}/g, '___');
-    if (phrase.includes('___') && s(t.reponse)) items.push({ type: 'trou', phrase, reponse: s(t.reponse), explication: s(t.explication) });
+    const it = { type: 'trou', phrase: s(t.phrase).replace(/_{2,}/g, '___'), tableau: cleanTable(t.tableau), reponse: s(t.reponse), explication: s(t.explication) };
+    if ((it.phrase.includes('___') || hasBlank(it)) && it.reponse) items.push(it);
   }
   items.forEach(it => Object.assign(it, { id: uid(), box: 0, due: 0 }));
   const m = matiere && matiere !== 'auto' ? matiere : (MATIERES.includes(s(r.matiere)) ? s(r.matiere) : 'Autre');
@@ -531,11 +558,14 @@ function packagePrompt(l) {
   const mat = l.matiereAuto ? `à identifier parmi : ${MATIERES.join(', ')}` : l.matiere;
   const blocks = [];
   if (l.format.quiz) blocks.push(`BLOC « QUIZ » — un bloc de code \`\`\`json contenant exactement cet objet :
-{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"...","explication":"..."}]}
+{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","tableau":[["Nombre d'œufs","6","12"],["Prix (€)","3","6"]],"choix":["...","...","...","..."],"bonne":0,"explication":"..."},{"question":"Quel tableau est un tableau de proportionnalité ?","choix":[{"tableau":[["…","…"],["…","…"]]},{"tableau":[["…","…"],["…","…"]]},{"tableau":[["…","…"],["…","…"]]},{"tableau":[["…","…"],["…","…"]]}],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"Les prix sont proportionnels. Complète le tableau.","tableau":[["Nombre d'œufs","6","12"],["Prix (€)","3","___"]],"reponse":"6","explication":"..."}]}
 - Il sera joué dans une application de révision, question par question, SANS la leçon sous les yeux : 20 à 35 éléments au total.
 - Choisis la répartition la plus efficace pour CETTE leçon et CETTE matière. Un type peut rester vide s'il ne convient pas.
 - resume : 4 à 8 points essentiels, une phrase chacun.
-- flashcards : recto = une vraie question, verso = la réponse courte.
+- Réponse à ÉCRIRE (flashcards et trous) seulement si elle est COURTE : un nombre, un mot ou une expression de 1 à 3 mots (ex. un mot d'anglais, le nom d'une notion). Dès que la réponse attendue est une phrase, une définition ou une explication, pose la question en QCM (4 propositions) ou en vrai/faux : l'élève choisit, il n'écrit pas de phrase.
+- flashcards : recto = une vraie question, verso = la réponse en 1 à 3 mots ou un nombre.
+- tableau (facultatif, dans toute question) : dès qu'une question s'appuie sur un tableau de valeurs, mets-le dans "tableau" : une liste de rangées, la première case de chaque rangée est son intitulé. N'écris JAMAIS un tableau dans le texte (pas de « ligne 1 = … », ni de « Haut : … ; Bas : … »). Dans un texte à trous, la case à trouver peut être dans le tableau : écris-y ___.
+- Un choix de QCM peut lui-même être un tableau : {"tableau":[...]} (ex. « Quel tableau est un tableau de proportionnalité ? »).
 - qcm : exactement 4 choix, un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase qui montre le raisonnement ou le calcul (ex. « 12 œufs, c'est 2 fois 6 œufs : 2 × 3 € = 6 € »).
 - vrai_faux : environ la moitié fausses ; correction = la phrase juste et pourquoi.
 - trous : phrase = un énoncé complet (il peut s'agir d'un petit problème) où UN seul élément est remplacé par ___ (trois tirets bas) ; reponse = la réponse attendue, sans unité pour un nombre ; si plusieurs écritures sont justes, sépare-les par « / » (ex. "1,5/1,50") ; explication = une phrase qui montre comment trouver la réponse.
@@ -546,6 +576,7 @@ function packagePrompt(l) {
 - Chaque exercice respecte les règles des questions ci-dessus : toutes les données nécessaires sont dans l'énoncé, une seule bonne réponse.
 - Dans les exercices, ne donne AUCUNE réponse (ni entre parenthèses, ni en exemple, ni en gras) : elles vont toutes dans le corrigé.
 - Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé : chaque réponse avec une courte explication du raisonnement ou du calcul.
+- Les tableaux de valeurs s'écrivent en tableau Markdown, jamais en texte.
 - Uniquement du Markdown simple : titres, listes, gras, tableaux. Pas d'image ni de HTML.`);
   return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
 Les images jointes sont les pages d'une leçon (photos du cahier, du manuel ou d'une fiche, ou captures d'écran), dans l'ordre.
@@ -571,6 +602,8 @@ Règle n° 2 — vérifie chaque question avant de l'écrire (fais-le pour toi, 
 3. Y a-t-il une seule bonne réponse, sans ambiguïté ?
 4. La réponse est-elle exacte ? Refais chaque calcul.
 5. Pour un QCM, les mauvais choix sont-ils plausibles (erreurs typiques : additionner au lieu de multiplier, confondre deux notions…) mais clairement faux ?
+6. Si la réponse est à écrire, tient-elle en 1 à 3 mots ou un nombre ? Sinon, transforme la question en QCM ou en vrai/faux.
+7. Si la question contient des valeurs en lignes et en colonnes, sont-elles dans "tableau" et pas dans le texte ?
 Si une question échoue à l'un de ces points, réécris-la ou supprime-la.
 
 Réponds UNIQUEMENT avec ${blocks.length > 1 ? 'les deux blocs de code suivants, dans cet ordre' : 'le bloc de code suivant'}, sans texte avant ni après :
@@ -757,14 +790,17 @@ function field(f, v, label, rows = 1) {
 }
 function itemEditor(it, n) {
   let b = '';
-  if (it.type === 'card') b = field('recto', it.recto, 'Question (recto)', 2) + field('verso', it.verso, 'Réponse (verso)', 2);
-  if (it.type === 'qcm') b = field('question', it.question, 'Question', 2) + `<label>Choix (coche le bon)</label>` +
+  const tab = it.tableau ? `<label>Tableau <span class="mute small">(une rangée par ligne, cases séparées par |, ___ pour la case à trouver)</span></label>
+    <textarea data-f="tableau" rows="${it.tableau.length}">${esc(tableText(it.tableau))}</textarea>` : '';
+  if (it.type === 'card') b = field('recto', it.recto, 'Question (recto)', 2) + tab + field('verso', it.verso, 'Réponse (verso)', 2);
+  if (it.type === 'qcm') b = field('question', it.question, 'Question', 2) + tab + `<label>Choix (coche le bon)</label>` +
     it.choix.map((c, i) => `<div class="choice-row"><input type="radio" name="b-${it.id}" value="${i}"${i === it.bonne ? ' checked' : ''}>
-      <input type="text" data-f="choix" data-i="${i}" value="${esc(c)}"></div>`).join('') + field('explication', it.explication, 'Explication');
-  if (it.type === 'vf') b = field('affirmation', it.affirmation, 'Affirmation', 2) +
+      ${isTableChoice(c) ? `<textarea data-f="choix" data-i="${i}" data-t="1" rows="${c.tableau.length}">${esc(tableText(c.tableau))}</textarea>`
+        : `<input type="text" data-f="choix" data-i="${i}" value="${esc(c)}">`}</div>`).join('') + field('explication', it.explication, 'Explication');
+  if (it.type === 'vf') b = field('affirmation', it.affirmation, 'Affirmation', 2) + tab +
     `<label>Réponse</label><select data-f="vrai"><option value="1"${it.vrai ? ' selected' : ''}>Vrai</option><option value="0"${it.vrai ? '' : ' selected'}>Faux</option></select>` +
     field('correction', it.correction, 'Correction');
-  if (it.type === 'trou') b = field('phrase', it.phrase, 'Phrase (garde ___ à la place de la réponse)', 2) + field('reponse', it.reponse, 'Réponse (plusieurs écritures séparées par /)')
+  if (it.type === 'trou') b = field('phrase', it.phrase, 'Phrase (garde ___ à la place de la réponse, ou dans le tableau)', 2) + tab + field('reponse', it.reponse, 'Réponse (plusieurs écritures séparées par /)')
     + field('explication', it.explication || '', 'Explication');
   return `<div class="item" data-id="${it.id}"><div class="item-h"><span>${n}. ${KIND[it.type]}</span>
     <button onclick="act.delItem('${it.id}')" aria-label="Supprimer">🗑️</button></div>${b}</div>`;
@@ -797,7 +833,8 @@ function readReview(l) {
     const el = $(`[data-id="${it.id}"]`); if (!el) continue;
     el.querySelectorAll('[data-f]').forEach(inp => {
       const f = inp.dataset.f;
-      if (f === 'choix') it.choix[+inp.dataset.i] = inp.value.trim();
+      if (f === 'choix') it.choix[+inp.dataset.i] = inp.dataset.t ? (parseTable(inp.value) ? { tableau: parseTable(inp.value) } : '') : inp.value.trim();
+      else if (f === 'tableau') it.tableau = parseTable(inp.value);
       else if (f === 'vrai') it.vrai = inp.value === '1';
       else it[f] = inp.value.trim();
     });
@@ -813,7 +850,7 @@ function readReview(l) {
 act.delItem = id => { readReview(E); E.items = E.items.filter(it => it.id !== id); renderReview(); };
 act.saveReview = async () => {
   readReview(E);
-  const bad = E.items.find(it => (it.type === 'trou' && !it.phrase.includes('___')) || (it.type === 'qcm' && it.choix.length < 2));
+  const bad = E.items.find(it => (it.type === 'trou' && !it.phrase.includes('___') && !hasBlank(it)) || (it.type === 'qcm' && it.choix.length < 2));
   if (bad) { toast('Une question est incomplète (texte à trous sans ___ ou QCM sans choix)'); return; }
   E.items = E.items.filter(it => (it.recto ?? it.question ?? it.affirmation ?? it.phrase));
   E.status = 'ready';
@@ -1076,10 +1113,13 @@ function viewPlay() {
       <button class="btn pri" ${ready ? '' : 'disabled'} onclick="${validate}">✅ Valider</button>
       <button class="btn" onclick="act.reveal()">💡 Voir la réponse</button></div>`;
   if (it.type === 'card') {
-    b = `<div class="card flash" style="cursor:default"><div>${esc(it.recto)}</div>
+    b = `<div class="card flash" style="cursor:default"><div>${esc(it.recto)}</div>${it.tableau ? tableHtml(it.tableau) : ''}
       ${st.answered || st.flipped ? `<div class="verso">${esc(it.verso)}</div>` : ''}</div>
       <div class="row" style="justify-content:center">${speakBtn(st.flipped ? it.verso : it.recto)}</div>`;
-    if (!st.flipped) b += `<form onsubmit="act.cardCheck(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
+    if (!st.flipped) b += longAnswer(it.verso)       // réponse en phrase : on réfléchit, on regarde, on s'évalue
+      ? `<p class="center mute">Réfléchis à ta réponse, puis regarde la bonne.</p>
+        <div class="row" style="justify-content:center"><button class="btn pri" onclick="act.cardShow()">💡 Voir la réponse</button></div>`
+      : `<form onsubmit="act.cardCheck(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
         spellcheck="false" placeholder="Écris ta réponse" style="font-size:22px"></form>` + actions(true, 'act.cardCheck()');
     else if (st.answered) b += feedback(st.correct, '', true, st.revealed);
     else b += `${st.typed ? `<div class="fb">Ta réponse : <b>${esc(st.typed)}</b></div>` : ''}
@@ -1088,14 +1128,14 @@ function viewPlay() {
         <button class="btn big good" onclick="act.card(true)">👍 J'avais bon</button></div>`;
   }
   if (it.type === 'qcm') {
-    b = `<div class="q">${esc(it.question)} ${speakBtn(it.question)}</div><div class="choices">${st.order.map(k => {
+    b = `<div class="q">${esc(it.question)} ${speakBtn(it.question)}</div>${it.tableau ? tableHtml(it.tableau) : ''}<div class="choices">${st.order.map(k => {
       const cls = st.answered ? (k === it.bonne ? ' good' : k === st.pick ? ' bad' : '') : (k === st.pick ? ' sel' : '');
-      return `<button class="btn${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.pick(${k})">${esc(it.choix[k])}</button>`; }).join('')}</div>`;
+      return `<button class="btn${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.pick(${k})">${choiceHtml(it.choix[k])}</button>`; }).join('')}</div>`;
     if (!st.answered) b += actions(st.pick !== undefined, 'act.validate()');
-    else b += feedback(st.correct, st.correct ? esc(it.explication) : `Bonne réponse : <b>${esc(it.choix[it.bonne])}</b>. ${esc(it.explication)}`, true, st.revealed);
+    else b += feedback(st.correct, st.correct ? esc(it.explication) : `Bonne réponse : ${isTableChoice(it.choix[it.bonne]) ? choiceHtml(it.choix[it.bonne]) : `<b>${esc(it.choix[it.bonne])}</b>.`} ${esc(it.explication)}`, true, st.revealed);
   }
   if (it.type === 'vf') {
-    b = `<div class="q">${esc(it.affirmation)} ${speakBtn(it.affirmation)}</div><div class="hero">
+    b = `<div class="q">${esc(it.affirmation)} ${speakBtn(it.affirmation)}</div>${it.tableau ? tableHtml(it.tableau) : ''}<div class="hero">
       ${[true, false].map(v => { const cls = st.answered ? (v === it.vrai ? ' good' : v === st.pick ? ' bad' : '') : (v === st.pick ? ' sel' : '');
         return `<button class="btn big${cls}" ${st.answered ? 'disabled style="opacity:1"' : ''} onclick="act.pick(${v})">${v ? '✅ Vrai' : '❌ Faux'}</button>`; }).join('')}</div>`;
     if (!st.answered) b += actions(st.pick !== undefined, 'act.validate()');
@@ -1104,7 +1144,7 @@ function viewPlay() {
   if (it.type === 'trou') {
     const shown = it.reponse.split('/')[0].trim();          // première écriture acceptée
     const filled = st.answered ? `<span class="blank">${esc(shown)}</span>` : '<span class="blank">?</span>';
-    b = `<div class="q">${esc(it.phrase).replace('___', filled)} ${speakBtn(it.phrase)}</div>`;
+    b = `<div class="q">${esc(it.phrase).replace('___', filled)} ${speakBtn(it.phrase)}</div>${it.tableau ? tableHtml(it.tableau, st.answered ? shown : null) : ''}`;
     if (!st.answered) b += `<form onsubmit="act.trou(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
         spellcheck="false" placeholder="Ta réponse" style="font-size:22px"></form>` + actions(true, 'act.trou()');
     else b += feedback(st.correct, st.correct
@@ -1145,6 +1185,7 @@ act.cardCheck = ev => {
   viewPlay();
 };
 act.card = ok => { grade(ok); act.next(); };
+act.cardShow = () => { S.st.flipped = true; viewPlay(); };
 // QCM et vrai/faux : on choisit, puis on valide.
 act.pick = v => { if (S.st.answered) return; S.st.pick = v; viewPlay(); };
 act.validate = () => {
