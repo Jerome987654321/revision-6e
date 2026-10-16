@@ -74,6 +74,13 @@ textarea{resize:vertical}
   align-items:center;justify-content:center;font-weight:800}
 .pick.on .tick{display:flex}
 .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.camera{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column}
+.camera video{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
+.camera.flash video{opacity:.3}
+.cam-bar{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.cam-shot{width:78px;height:78px;border-radius:50%;border:6px solid #fff;background:#ff5a5f;cursor:pointer}
+.cam-shot:active{transform:scale(.92)}
+.cam-count{position:absolute;top:16px;left:0;right:0;text-align:center;color:#fff;font-weight:700;text-shadow:0 1px 3px #000}
 .spinner{width:56px;height:56px;border-radius:50%;border:6px solid var(--soft);border-top-color:var(--pri);animation:spin 1s linear infinite;margin:24px auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 .item{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:var(--bg)}
@@ -181,7 +188,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 19;
+const APP_VERSION = 20;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -374,7 +381,9 @@ async function viewNew() {
     <p class="mute small">Une photo par page, bien à plat, avec de la lumière et sans reflet, ou des captures d'écran (ENT, manuel numérique…). Jusqu'à ${MAX_PHOTOS} pages.
       <br>Depuis une capture ou la galerie Android : <b>Partager → Révisions 6e</b>. Sur ordinateur : colle une capture avec <b>Ctrl+V</b>.</p>
     <div class="row">
-      <label class="btn pri filebtn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" onchange="act.addFiles(this)"></label>
+      ${NATIVE_CAPTURE
+        ? '<label class="btn pri filebtn">📸 Prendre une photo<input type="file" accept="image/*" capture="environment" onchange="act.addFiles(this)"></label>'
+        : '<button class="btn pri" onclick="act.openCamera()">📸 Prendre une photo</button>'}
       <label class="btn filebtn">🖼️ Photos ou captures d'écran<input type="file" accept="image/*" multiple onchange="act.addFiles(this)"></label>
       <a class="btn" href="#/photos">🗂️ Photos déjà prises</a>
     </div>
@@ -407,6 +416,60 @@ document.addEventListener('paste', ev => {     // capture d'écran collée (Ctrl
   ev.preventDefault(); act.addFiles({ files });
 });
 act.rmPhoto = async i => { pending.splice(i, 1); await savePending(); viewNew(); };
+// Prise de vue dans l'app : Chrome et Edge sur Windows ignorent « capture » et ouvrent l'explorateur de fichiers.
+const NATIVE_CAPTURE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let cam = null;   // { stream, el, devices, idx, taken }
+async function startStream(deviceId) {
+  cam.stream?.getTracks().forEach(t => t.stop());
+  cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: deviceId
+    ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    : { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  cam.el.querySelector('video').srcObject = cam.stream;
+}
+act.openCamera = async () => {
+  if (!navigator.mediaDevices?.getUserMedia) return toast('Caméra indisponible sur cet appareil : utilise « Photos ou captures d\'écran »');
+  const el = document.createElement('div'); el.className = 'camera';
+  el.innerHTML = `<video autoplay playsinline muted></video>
+    <div class="cam-bar"><button class="btn" onclick="act.closeCamera()">Terminé</button>
+      <button class="cam-shot" onclick="act.shoot()" aria-label="Prendre la photo"></button>
+      <button class="btn" id="cam-switch" onclick="act.switchCamera()" aria-label="Changer de caméra">🔄</button></div>
+    <div class="cam-count" id="cam-count"></div>`;
+  document.body.appendChild(el);
+  cam = { el, taken: 0, idx: 0, devices: [] };
+  try {
+    await startStream();
+    cam.devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const cur = cam.stream.getVideoTracks()[0]?.getSettings().deviceId;
+    cam.idx = Math.max(0, cam.devices.findIndex(d => d.deviceId === cur));
+    if (cam.devices.length < 2) $('#cam-switch').style.visibility = 'hidden';
+  } catch (e) {
+    act.closeCamera();
+    toast(e.name === 'NotAllowedError' ? 'Autorise la caméra pour ce site (icône 🔒 dans la barre d\'adresse)' : 'Caméra indisponible : utilise « Photos ou captures d\'écran »');
+  }
+};
+act.switchCamera = async () => {
+  if (!cam || cam.devices.length < 2) return;
+  cam.idx = (cam.idx + 1) % cam.devices.length;
+  try { await startStream(cam.devices[cam.idx].deviceId); } catch { toast('Impossible de changer de caméra'); }
+};
+act.shoot = async () => {
+  if (!cam?.stream) return;
+  if (pending.length >= MAX_PHOTOS) return toast(`Maximum ${MAX_PHOTOS} pages par leçon`);
+  const v = cam.el.querySelector('video'), c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  if (!c.width) return;
+  c.getContext('2d').drawImage(v, 0, 0);
+  const raw = await new Promise(r => c.toBlob(r, 'image/jpeg', .92));
+  pending.push(await compress(raw)); await savePending();
+  cam.taken++; cam.el.classList.add('flash'); setTimeout(() => cam?.el.classList.remove('flash'), 150);
+  $('#cam-count').textContent = `${cam.taken} photo${cam.taken > 1 ? 's' : ''} prise${cam.taken > 1 ? 's' : ''} · ${pending.length}/${MAX_PHOTOS} pages`;
+};
+act.closeCamera = () => {
+  if (!cam) return;
+  cam.stream?.getTracks().forEach(t => t.stop());
+  cam.el.remove(); const taken = cam.taken; cam = null;
+  if (taken) viewNew();
+};
 act.makePackage = async () => {
   const l = { id: uid(), createdAt: Date.now(), status: 'package', matiere: pendingMat === 'auto' ? 'À classer' : pendingMat,
     matiereAuto: pendingMat === 'auto', titre: pendingTitle.trim() || `Leçon du ${dateFr(Date.now())}`, titreAuto: !pendingTitle.trim(),

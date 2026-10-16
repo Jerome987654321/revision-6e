@@ -1,5 +1,5 @@
 // Garde l'application disponible hors ligne. Les appels à Gemini ne sont jamais mis en cache.
-const CACHE = 'revision6e-v19';
+const CACHE = 'revision6e-v20';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -44,8 +44,8 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  if (new URL(req.url).searchParams.has('check')) return;
-  if (new URL(req.url).pathname.startsWith('/api/')) return;   // compte en ligne : toujours le réseau   // vérification de mise à jour : toujours le réseau
+  if (new URL(req.url).searchParams.has('check')) return;   // vérification de mise à jour : toujours le réseau
+  if (new URL(req.url).pathname.startsWith('/api/')) return;   // compte en ligne : toujours le réseau
   e.respondWith(caches.open(CACHE).then(async cache => {
     // La page elle-même : toujours la dernière version en ligne, le cache seulement hors connexion.
     if (req.mode === 'navigate') {
