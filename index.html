@@ -206,7 +206,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -321,7 +321,7 @@ function toLesson(r, blobs, matiere) {
   for (const v of r.vrai_faux || []) if (s(v.affirmation)) items.push({ type: 'vf', affirmation: s(v.affirmation), vrai: !!v.vrai, correction: s(v.correction) });
   for (const t of r.trous || []) {
     const phrase = s(t.phrase).replace(/_{2,}/g, '___');
-    if (phrase.includes('___') && s(t.reponse)) items.push({ type: 'trou', phrase, reponse: s(t.reponse) });
+    if (phrase.includes('___') && s(t.reponse)) items.push({ type: 'trou', phrase, reponse: s(t.reponse), explication: s(t.explication) });
   }
   items.forEach(it => Object.assign(it, { id: uid(), box: 0, due: 0 }));
   const m = matiere && matiere !== 'auto' ? matiere : (MATIERES.includes(s(r.matiere)) ? s(r.matiere) : 'Autre');
@@ -531,30 +531,47 @@ function packagePrompt(l) {
   const mat = l.matiereAuto ? `à identifier parmi : ${MATIERES.join(', ')}` : l.matiere;
   const blocks = [];
   if (l.format.quiz) blocks.push(`BLOC « QUIZ » — un bloc de code \`\`\`json contenant exactement cet objet :
-{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"..."}]}
-- Il sera joué dans une application de révision : 20 à 35 éléments au total.
-- Choisis la répartition la plus efficace pour CETTE leçon et CETTE matière (par ex. beaucoup de cartes pour du vocabulaire ou des dates, des QCM pour les notions, des textes à trous pour les définitions et les règles, des calculs en QCM pour les maths). Un type peut rester vide s'il ne convient pas.
+{"lisible":true,"matiere":"...","titre":"...","resume":["..."],"flashcards":[{"recto":"...","verso":"..."}],"qcm":[{"question":"...","choix":["...","...","...","..."],"bonne":0,"explication":"..."}],"vrai_faux":[{"affirmation":"...","vrai":true,"correction":"..."}],"trous":[{"phrase":"... ___ ...","reponse":"...","explication":"..."}]}
+- Il sera joué dans une application de révision, question par question, SANS la leçon sous les yeux : 20 à 35 éléments au total.
+- Choisis la répartition la plus efficace pour CETTE leçon et CETTE matière. Un type peut rester vide s'il ne convient pas.
 - resume : 4 à 8 points essentiels, une phrase chacun.
-- flashcards : recto = question courte, verso = réponse courte.
-- qcm : exactement 4 choix plausibles, un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase.
-- vrai_faux : environ la moitié fausses ; correction = la phrase juste.
-- trous : UN mot-clé remplacé par ___ (trois tirets bas) ; reponse = le mot manquant (1 à 3 mots).
+- flashcards : recto = une vraie question, verso = la réponse courte.
+- qcm : exactement 4 choix, un seul juste ; bonne = indice du bon choix (0 à 3) ; explication = une phrase qui montre le raisonnement ou le calcul (ex. « 12 œufs, c'est 2 fois 6 œufs : 2 × 3 € = 6 € »).
+- vrai_faux : environ la moitié fausses ; correction = la phrase juste et pourquoi.
+- trous : phrase = un énoncé complet (il peut s'agir d'un petit problème) où UN seul élément est remplacé par ___ (trois tirets bas) ; reponse = la réponse attendue, sans unité pour un nombre ; si plusieurs écritures sont justes, sépare-les par « / » (ex. "1,5/1,50") ; explication = une phrase qui montre comment trouver la réponse.
 - Si les photos sont illisibles : "lisible": false et des listes vides.`);
   if (l.format.print) blocks.push(`BLOC « FICHE » — un bloc de code \`\`\`markdown contenant une fiche de révision à imprimer (format A4, noir et blanc) :
 - # titre de la leçon, puis ## L'essentiel à retenir (5 à 8 points courts).
-- ## Exercices : 5 à 8 exercices variés et adaptés à la matière (questions de cours, QCM à cocher avec ☐, textes à trous, relier par une flèche, vrai/faux, frise ou dates en histoire, vocabulaire en langues, calculs en maths), du plus facile au plus difficile, numérotés, avec des lignes ________ pour écrire les réponses.
+- ## Exercices : 5 à 8 exercices variés et adaptés à la matière (questions de cours, petits problèmes, QCM à cocher avec ☐, relier par une flèche, vrai/faux, frise ou dates en histoire, vocabulaire en langues, calculs en maths), du plus facile au plus difficile, numérotés, avec des lignes ________ pour écrire les réponses.
+- Chaque exercice respecte les règles des questions ci-dessus : toutes les données nécessaires sont dans l'énoncé, une seule bonne réponse.
 - Dans les exercices, ne donne AUCUNE réponse (ni entre parenthèses, ni en exemple, ni en gras) : elles vont toutes dans le corrigé.
-- Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé avec toutes les réponses.
+- Puis une ligne contenant uniquement <!-- saut de page --> et ## Corrigé : chaque réponse avec une courte explication du raisonnement ou du calcul.
 - Uniquement du Markdown simple : titres, listes, gras, tableaux. Pas d'image ni de HTML.`);
   return `Tu es un professeur de collège qui aide un élève de 6e (11 ans) à réviser.
 Les images jointes sont les pages d'une leçon (photos du cahier, du manuel ou d'une fiche, ou captures d'écran), dans l'ordre.
 Matière : ${mat}.${l.titreAuto ? '' : `\nTitre de la leçon : ${l.titre}.`}
 
-Règles :
-- Utilise UNIQUEMENT le contenu des photos. N'ajoute aucune notion qui n'y figure pas.
+Règles générales :
+- Les notions viennent UNIQUEMENT de la leçon : n'ajoute aucune notion qui n'y figure pas. Tu peux en revanche inventer de nouvelles valeurs, de nouvelles phrases ou de nouveaux exemples pour faire pratiquer ce qu'elle enseigne.
 - Français, phrases courtes et simples, vocabulaire d'un élève de 6e. Pour une langue étrangère : consignes en français, mots et phrases à apprendre dans la langue étudiée.
 - Recopie fidèlement l'orthographe des noms propres, dates, formules et mots de vocabulaire.
 - Couvre toute la leçon, sans répéter la même notion sous la même forme.
+
+Règle n° 1 — chaque question se suffit à elle-même :
+- L'élève doit pouvoir répondre SANS la leçon sous les yeux, avec ce qu'il a appris et les informations données dans la question.
+- Ne demande jamais une valeur, un détail ou un résultat qui n'apparaît que dans un exemple, un tableau ou un exercice de la leçon. Exemple interdit : « Chez le marchand A, 12 œufs coûtent ___ euros » si le prix n'est pas donné. Exemple correct : « Chez un marchand, 6 œufs coûtent 3 €. Les prix sont proportionnels. Combien coûtent 12 œufs ? ».
+- Savoir-faire (calcul, proportionnalité, conversion, conjugaison, accord, lecture d'un tableau ou d'un graphique…) : crée de NOUVEAUX exercices du même type, avec de nouvelles valeurs, et mets dans l'énoncé toutes les données nécessaires. Si un tableau est utile, écris ses valeurs dans la question.
+- Connaissances à retenir (définitions, dates, vocabulaire, règles, personnages, lieux) : interroge-les directement, avec assez de contexte pour qu'une seule réponse soit possible.
+- Fais réfléchir : appliquer une règle, choisir la bonne méthode, expliquer un « pourquoi », repérer une erreur ; pas seulement réciter ou recopier une phrase de la leçon.
+- Adapte les formats à la matière : en maths et en sciences, surtout des petits problèmes et des calculs ; en français et en langues, appliquer la règle sur de nouvelles phrases ; en histoire-géographie, SVT et EMC, définitions, dates, causes et conséquences. Les textes à trous ne sont qu'un format parmi d'autres, et le mot manquant doit toujours se déduire de la phrase et de ce qui a été appris.
+
+Règle n° 2 — vérifie chaque question avant de l'écrire (fais-le pour toi, sans écrire ces vérifications) :
+1. Un élève de 6e qui a appris la leçon peut-il répondre sans l'avoir sous les yeux ?
+2. Toutes les données nécessaires sont-elles dans la question ?
+3. Y a-t-il une seule bonne réponse, sans ambiguïté ?
+4. La réponse est-elle exacte ? Refais chaque calcul.
+5. Pour un QCM, les mauvais choix sont-ils plausibles (erreurs typiques : additionner au lieu de multiplier, confondre deux notions…) mais clairement faux ?
+Si une question échoue à l'un de ces points, réécris-la ou supprime-la.
 
 Réponds UNIQUEMENT avec ${blocks.length > 1 ? 'les deux blocs de code suivants, dans cet ordre' : 'le bloc de code suivant'}, sans texte avant ni après :
 
@@ -747,7 +764,8 @@ function itemEditor(it, n) {
   if (it.type === 'vf') b = field('affirmation', it.affirmation, 'Affirmation', 2) +
     `<label>Réponse</label><select data-f="vrai"><option value="1"${it.vrai ? ' selected' : ''}>Vrai</option><option value="0"${it.vrai ? '' : ' selected'}>Faux</option></select>` +
     field('correction', it.correction, 'Correction');
-  if (it.type === 'trou') b = field('phrase', it.phrase, 'Phrase (garde ___ à la place du mot)', 2) + field('reponse', it.reponse, 'Mot manquant');
+  if (it.type === 'trou') b = field('phrase', it.phrase, 'Phrase (garde ___ à la place de la réponse)', 2) + field('reponse', it.reponse, 'Réponse (plusieurs écritures séparées par /)')
+    + field('explication', it.explication || '', 'Explication');
   return `<div class="item" data-id="${it.id}"><div class="item-h"><span>${n}. ${KIND[it.type]}</span>
     <button onclick="act.delItem('${it.id}')" aria-label="Supprimer">🗑️</button></div>${b}</div>`;
 }
@@ -1084,13 +1102,14 @@ function viewPlay() {
     else b += feedback(st.correct, `C'est ${it.vrai ? 'vrai' : 'faux'}. ${esc(it.correction)}`, true, st.revealed);
   }
   if (it.type === 'trou') {
-    const filled = st.answered ? `<span class="blank">${esc(it.reponse)}</span>` : '<span class="blank">?</span>';
+    const shown = it.reponse.split('/')[0].trim();          // première écriture acceptée
+    const filled = st.answered ? `<span class="blank">${esc(shown)}</span>` : '<span class="blank">?</span>';
     b = `<div class="q">${esc(it.phrase).replace('___', filled)} ${speakBtn(it.phrase)}</div>`;
     if (!st.answered) b += `<form onsubmit="act.trou(event)"><input type="text" id="t-in" autocomplete="off" autocapitalize="off"
-        spellcheck="false" placeholder="Le mot manquant" style="font-size:22px"></form>` + actions(true, 'act.trou()');
+        spellcheck="false" placeholder="Ta réponse" style="font-size:22px"></form>` + actions(true, 'act.trou()');
     else b += feedback(st.correct, st.correct
-      ? (st.hint ? `Attention à l'orthographe : <b>${esc(it.reponse)}</b>` : '')
-      : `${st.typed ? `Tu as écrit « ${esc(st.typed)} ». ` : ''}La réponse était <b>${esc(it.reponse)}</b>.`, true, st.revealed)
+      ? [st.hint ? `Attention à l'orthographe : <b>${esc(shown)}</b>.` : '', esc(it.explication || '')].filter(Boolean).join(' ')
+      : `${st.typed ? `Tu as écrit « ${esc(st.typed)} ». ` : ''}La réponse était <b>${esc(shown)}</b>. ${esc(it.explication || '')}`, true, st.revealed)
       + (!st.correct && st.typed ? `<button class="btn" onclick="act.override()">J'avais bon quand même</button>` : '');
   }
   setView(`<div class="play"><div class="row" style="justify-content:space-between"><span class="kind">${KIND[it.type]} · ${esc(S.lessons.size > 1 ? l.titre : S.title)}</span>
@@ -1144,9 +1163,10 @@ act.trou = ev => {
   const typed = $('#t-in').value.trim(); if (!typed) return toast('Écris d\'abord ta réponse');
   const { it } = current();
   const answers = it.reponse.split('/').map(x => x.trim()).filter(Boolean);
-  const ok = answers.some(a => norm(a) === norm(typed));
+  const num = x => { const m = String(x).replace(/\s/g, '').replace(',', '.').match(/^-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
+  const ok = answers.some(a => norm(a) === norm(typed) || (!isNaN(num(a)) && num(a) === num(typed)));
   S.st.typed = typed;
-  S.st.hint = ok && !answers.some(a => a.toLowerCase() === typed.toLowerCase());
+  S.st.hint = ok && !answers.some(a => a.toLowerCase() === typed.toLowerCase() || (!isNaN(num(a)) && num(a) === num(typed)));   // pas de remarque d'orthographe pour un nombre
   grade(ok); viewPlay();
 };
 act.override = () => {
