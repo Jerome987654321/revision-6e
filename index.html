@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#3b6fe0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1c212b" media="(prefers-color-scheme: dark)">
+<script>
+// Thème choisi sur cet appareil, appliqué avant l'affichage pour éviter un éclair de la mauvaise couleur.
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === 'light' || t === 'dark') root.dataset.theme = t; else delete root.dataset.theme;
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.remove();
+  const meta = (content, media) => { const m = document.createElement('meta'); m.name = 'theme-color'; m.content = content; if (media) m.media = media; document.head.appendChild(m); };
+  if (t === 'light') meta('#3b6fe0'); else if (t === 'dark') meta('#1c212b');
+  else { meta('#3b6fe0', '(prefers-color-scheme: light)'); meta('#1c212b', '(prefers-color-scheme: dark)'); }
+}
+try { applyTheme(localStorage.getItem('theme') || 'auto'); } catch {}
+</script>
 <title>Révisions 6e</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -17,12 +29,18 @@
   --shadow:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
 }
 @media (prefers-color-scheme: dark){
-  :root{
+  :root:not([data-theme="light"]){
     --bg:#12151c; --card:#1c212b; --ink:#e8ecf3; --mute:#9aa4b5; --line:#2c3341;
     --pri:#6b95f5; --pri-ink:#0d1220; --soft:#222c40;
     --ok:#4cc683; --ok-bg:#16301f; --ko:#f07878; --ko-bg:#3a1c1c; --warn-bg:#3a2f12;
     --shadow:none;
   }
+}
+:root[data-theme="dark"]{
+    --bg:#12151c; --card:#1c212b; --ink:#e8ecf3; --mute:#9aa4b5; --line:#2c3341;
+    --pri:#6b95f5; --pri-ink:#0d1220; --soft:#222c40;
+    --ok:#4cc683; --ok-bg:#16301f; --ko:#f07878; --ko-bg:#3a1c1c; --warn-bg:#3a2f12;
+    --shadow:none;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
@@ -188,7 +206,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 
 // ---------- Stockage local (IndexedDB) ----------
@@ -1195,6 +1213,9 @@ async function viewSettings() {
     <select id="s-goal">${[[30, 'Tranquille'], [50, 'Normal'], [80, 'Sérieux'], [120, 'Intense']].map(([v, t]) =>
       `<option value="${v}"${v === goal ? ' selected' : ''}>${t} — ${v} XP (environ ${Math.max(1, Math.round(v / 60))} quiz)</option>`).join('')}</select>
     <p class="small mute">Une bonne réponse rapporte ${XP_OK} XP, un quiz terminé ${XP_END} XP de bonus (le double sans faute).</p>
+    <label for="s-theme">Thème <span class="mute small">(sur cet appareil)</span></label>
+    <select id="s-theme" onchange="act.setTheme(this.value)">${[['auto', 'Automatique (comme l\'appareil)'], ['light', 'Clair'], ['dark', 'Sombre']].map(([v, t]) =>
+      `<option value="${v}"${v === themeNow() ? ' selected' : ''}>${t}</option>`).join('')}</select>
     <div class="row"><button class="btn pri" onclick="act.saveSettings()">💾 Enregistrer</button></div>
   </div>
   <div class="card">
@@ -1219,6 +1240,8 @@ async function accountCard() {
     : '<p>Le compte existe, mais cet appareil n\'est pas encore connecté : il le sera au prochain déverrouillage avec le code secret.</p>';
   return `<div class="card"><h2 style="margin-top:0">☁️ Compte en ligne</h2>${body}</div>`;
 }
+function themeNow() { try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; } }
+act.setTheme = t => { try { localStorage.setItem('theme', t); } catch {} applyTheme(t); };
 act.saveSettings = async () => {
   const name = $('#s-name').value.trim(), goal = +$('#s-goal').value;
   await KV.set('name', name); await KV.set('goal', goal);
