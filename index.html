@@ -184,6 +184,54 @@ body.locked header .logo{pointer-events:none}
 .print-doc td,.print-doc th{border:1px solid #999;padding:6px 8px;text-align:left}
 .sheet + .sheet{margin-top:32px;border-top:2px dashed #bbb;padding-top:24px}
 .sheet-meta{color:#666;font-size:13px;margin:0}
+.path-teaser{display:block;text-decoration:none;color:var(--ink)}
+.frise{position:relative;display:flex;height:24px;margin:34px 0 14px}
+.fz-p{position:relative;background:var(--soft);border-radius:8px;overflow:hidden;cursor:pointer}
+.fz-p>div{height:100%;background:var(--pri)}
+.fz-p span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--ink);text-shadow:0 0 3px var(--card)}
+.fz-p.on span{color:#fff;text-shadow:none}
+.fz-h{display:flex;align-items:center;justify-content:center;font-size:13px;min-width:16px}
+.fz-me{position:absolute;top:-32px;width:30px;height:30px;border-radius:50%;transform:translateX(-50%);border:2px solid var(--card);box-shadow:var(--shadow);background:var(--card)}
+.mchips{display:flex;flex-wrap:wrap;gap:6px}
+.mchip{font-size:13px;padding:3px 9px;border-radius:99px;background:hsl(var(--h) 70% 55% / .16);border:1px solid hsl(var(--h) 60% 50% / .45)}
+.pcard.fut{opacity:.6}
+.trail{position:relative;margin:8px 0 0}
+.trail svg{position:absolute;left:0;top:0;overflow:visible}
+.trail .road{fill:none;stroke:var(--line);stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
+.trail .walk{fill:none;stroke:var(--pri);stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
+.trail.anim .walk{transition:stroke-dashoffset var(--dur) ease-in-out}
+.trail.go .walk{stroke-dashoffset:0!important}
+.ps{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center}
+.pn{position:relative;width:46px;height:46px;border-radius:50%;border:3px solid var(--line);background:var(--card);padding:0;
+  display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:22px;line-height:1;cursor:pointer;color:var(--ink)}
+.pn.act{background:hsl(var(--h) 70% 58%);border-color:hsl(var(--h) 65% 42%);box-shadow:0 4px 0 hsl(var(--h) 60% 36%)}
+.pn.two{font-size:15px;letter-spacing:-2px}
+.pn.off{border-style:dashed;font-size:16px;opacity:.7}
+.pn.fut{border-style:dotted;opacity:.45}
+.pn.now{outline:4px solid var(--pri);outline-offset:3px}
+.pn i,.pw i{position:absolute;top:-7px;right:-9px;background:#f7931e;color:#fff;font-style:normal;font-size:11px;font-weight:800;border-radius:99px;padding:1px 6px;letter-spacing:0}
+.pl{position:absolute;top:52px;font-size:11px;color:var(--mute);white-space:nowrap}
+.pw{position:absolute;translate:-50% -50%;width:30px;height:30px;border-radius:50%;border:2px solid #f0b400;background:#fff3c4;padding:0;font-size:15px;cursor:pointer}
+.pflag{position:absolute;translate:-50% -50%;font-size:22px;pointer-events:none}
+.pflag.end{font-size:26px}
+.pav{position:absolute;width:44px;height:44px;border-radius:50%;transform:translate(-50%,-100%);border:3px solid var(--card);box-shadow:var(--shadow);background:var(--card);pointer-events:none;animation:hop 1.4s ease-in-out infinite}
+@keyframes hop{0%,100%{margin-top:0}50%{margin-top:-8px}}
+.trail.anim:not(.go) .pn.act,.trail.anim:not(.go) .pw,.trail.anim:not(.go) .pav,.trail.anim:not(.go) .pflag{opacity:0}
+.trail.go .pn.act,.trail.go .pw{animation:pop .45s ease both;animation-delay:var(--dl)}
+.trail.go .pav{animation:pavIn .5s ease both,hop 1.4s ease-in-out infinite;animation-delay:var(--dl),calc(var(--dl) + .5s)}
+.trail.go .pflag{animation:pop .45s ease both;animation-delay:var(--dur)}
+@keyframes pavIn{from{opacity:0;margin-top:-30px}to{opacity:1;margin-top:0}}
+.holcard{display:flex;gap:14px;align-items:center;margin:12px 0;padding:14px 18px;border-radius:18px;border:2px dashed var(--line);background:var(--card)}
+.holcard.fut{opacity:.65}
+.holcard.now{border-style:solid;border-color:var(--pri)}
+.hol-e{font-size:38px}
+.hol-me{width:52px;height:52px;border-radius:50%;animation:hop 1.4s ease-in-out infinite}
+#ptip{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(420px,calc(100% - 32px));z-index:30;margin:0;padding-right:52px}
+#ptip[hidden]{display:none}
+#ptip p{margin:8px 0 0}
+.tip-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);margin-top:6px}
+.tip-x{position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:16px}
+@media (prefers-reduced-motion:reduce){.pav,.hol-me{animation:none!important}}
 @media print{
   header,.noprint,#toast,.sticky{display:none!important}
   html,body{background:#fff}
@@ -213,7 +261,7 @@ const MATIERES = ['Français','Maths','Histoire-Géo','EMC','SVT','Physique-Chim
 const INTERVALS = [0, 1, 2, 4, 8, 16];          // jours avant la prochaine révision, par boîte Leitner
 const DAILY_MAX = 20;                           // questions par séance « Réviser aujourd'hui »
 const MAX_PHOTOS = 6;
-const APP_VERSION = 23;
+const APP_VERSION = 24;
 const KIND = { card: 'Carte', qcm: 'QCM', vf: 'Vrai ou faux', trou: 'Texte à trous' };
 // Tableaux dans les questions et les choix : une liste de rangées, la première case de chaque rangée est son intitulé.
 function cleanTable(t) {
@@ -272,7 +320,7 @@ const KV = {
     return tx('kv', 'readwrite', s => s.put({ k, v }));
   },
 };
-const META_KEYS = new Set(['stats', 'streak', 'goal', 'name']);   // progrès et réglages qui suivent le compte
+const META_KEYS = new Set(['stats', 'streak', 'goal', 'name', 'zone']);   // progrès et réglages qui suivent le compte
 
 // ---------- Utilitaires ----------
 function today() { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000); }
@@ -367,6 +415,7 @@ async function viewHome() {
   await loadPending();
   if (pending.length) h += `<div class="card notice">📷 ${pending.length} photo${pending.length > 1 ? 's' : ''} en attente : <a href="#/new">reprendre la nouvelle leçon</a>.</div>`;
   h += await progressBanner();
+  h += await pathTeaser();
   h += `<div class="hero">
     <a class="btn big pri" href="#/daily">🧠 Réviser aujourd'hui <span class="pill">${Math.min(due, DAILY_MAX)}</span></a>
     <a class="btn big" href="#/new">📷 Nouvelle leçon</a></div>`;
@@ -966,6 +1015,7 @@ async function checkBadges() {
 }
 async function finishSession() {   // fin de quiz : bonus, historique par matière, badges
   if (S.result) return S.result;
+  ensureDayQuiz();
   const perfect = S.answered >= 5 && S.ok === S.answered;
   const bonus = S.answered ? XP_END * (perfect ? 2 : 1) : 0;
   gainXp(bonus);
@@ -974,6 +1024,7 @@ async function finishSession() {   // fin de quiz : bonus, historique par matiè
     for (const [mat, r] of Object.entries(S.byMat)) {
       const m = ST.mats[mat]; m.quiz = (m.quiz || 0) + 1;
       m.sessions = [...m.sessions, { d: today(), ok: r.ok, n: r.n }].slice(-30);
+      const q = dayStat().q ||= {}; q[mat] = (q[mat] || 0) + 1;      // pour le chemin : quiz par matière et par jour
     }
   }
   ST.best = Math.max(ST.best, await streakNow());
@@ -1064,6 +1115,7 @@ async function viewProgress() {
     <div class="center">${ring(d, goal, 96)}<div class="small"><b>${d}/${goal} XP</b><br><span class="mute">objectif du jour</span></div></div>
   </div>
   <div class="card"><div class="week">${week}</div></div>
+  ${await pathTeaser()}
   <h2>Par matière</h2>
   ${matCards ? `<div class="grid2">${matCards}</div>` : '<p class="mute">Fais un premier quiz pour voir tes progrès par matière.</p>'}
   <h2>Badges <span class="mute small">${Object.keys(ST.badges).length}/${BADGES.length}</span></h2>
@@ -1076,6 +1128,237 @@ async function viewProgress() {
     ${weak && weak.pct < 70 ? `<p>À retravailler en priorité : <b>${esc(weak.mat)}</b> (${weak.pct} % de bonnes réponses).</p>` : ''}
   </details>`);
 }
+
+// --- Le chemin : l'année scolaire en 5 points par semaine (lundi → vendredi), période par période.
+// Calendrier officiel (data.education.gouv.fr) en dates locales ; une plage va du premier jour de vacances au jour de reprise (exclu).
+const SCHOOL_YEARS = [
+  { y: '2026-2027', start: '2026-09-01', end: '2027-07-03', ponts: [['2027-05-07', '2027-05-08']], hols: [
+    ['Toussaint', '2026-10-17', '2026-11-02'], ['Noël', '2026-12-19', '2027-01-04'],
+    ['Hiver', { A: ['2027-02-13', '2027-03-01'], B: ['2027-02-20', '2027-03-08'], C: ['2027-02-06', '2027-02-22'] }],
+    ['Printemps', { A: ['2027-04-10', '2027-04-26'], B: ['2027-04-17', '2027-05-03'], C: ['2027-04-03', '2027-04-19'] }]] },
+  { y: '2027-2028', start: '2027-09-02', end: '2028-07-04', ponts: [['2028-05-25', '2028-05-29']], hols: [
+    ['Toussaint', '2027-10-23', '2027-11-08'], ['Noël', '2027-12-18', '2028-01-03'],
+    ['Hiver', { A: ['2028-02-19', '2028-03-06'], B: ['2028-02-05', '2028-02-21'], C: ['2028-02-12', '2028-02-28'] }],
+    ['Printemps', { A: ['2028-04-22', '2028-05-09'], B: ['2028-04-08', '2028-04-24'], C: ['2028-04-15', '2028-05-02'] }]] },
+];
+const HOL_EMO = { Toussaint: '🍂', Noël: '🎄', Hiver: '⛷️', Printemps: '🌸', Été: '☀️' };
+const HOL_OF = { Toussaint: 'de la Toussaint', Noël: 'de Noël', Hiver: "d'hiver", Printemps: 'de printemps', Été: "d'été" };
+const MAT_EMO = { 'Français': '📖', Maths: '📐', 'Histoire-Géo': '🌍', EMC: '⚖️', SVT: '🌱', 'Physique-Chimie': '🧪', Technologie: '⚙️',
+  Anglais: '💂', Espagnol: '💃', Allemand: '🥨', Musique: '🎵', 'Arts plastiques': '🎨' };
+const matEmo = m => MAT_EMO[m] || '📝';
+const dayNum = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 86400000;   // même échelle que today()
+const weekday = d => (d + 4) % 7;                       // 0 = dimanche, 1 = lundi…
+const mondayOf = d => d - (weekday(d) + 6) % 7;
+const fmtDay = (d, o) => new Date(d * 86400000).toLocaleDateString('fr-FR', { timeZone: 'UTC', ...o });
+const frDay = d => fmtDay(d, { day: 'numeric', month: 'long' }).replace(/^1 /, '1er ');
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function feries(y) {                                    // jours fériés de l'année civile y (Pâques : algorithme de Meeus)
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+    g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4,
+    l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), x = h + l - 7 * m + 114;
+  const easter = Date.UTC(y, Math.floor(x / 31) - 1, x % 31 + 1) / 86400000;
+  return [easter + 1, easter + 39, easter + 50,       // lundi de Pâques, Ascension, lundi de Pentecôte
+    ...['01-01', '05-01', '05-08', '07-14', '08-15', '11-01', '11-11', '12-25'].map(md => dayNum(`${y}-${md}`))];
+}
+function schoolYear(t, zone) {
+  const Y = [...SCHOOL_YEARS].reverse().find(y => dayNum(y.start) <= t) || SCHOOL_YEARS[0];
+  const start = dayNum(Y.start), end = dayNum(Y.end), off = new Set();
+  for (const y of [+Y.start.slice(0, 4), +Y.end.slice(0, 4)]) feries(y).forEach(d => off.add(d));
+  for (const [s, e] of Y.ponts) for (let d = dayNum(s); d < dayNum(e); d++) off.add(d);
+  const hols = Y.hols.map(([name, a, b]) => { const [s, e] = typeof a === 'string' ? [a, b] : a[zone] || a.B; return { name, s: dayNum(s), e: dayNum(e) }; });
+  const periods = []; let from = start;
+  [...hols, { name: 'Été', s: end, e: end + 62 }].forEach((hol, i) => { periods.push({ n: i + 1, s: from, e: hol.s, hol }); from = hol.e; });
+  return { label: Y.y, start, end, off, periods };
+}
+const isSchool = (Y, d) => weekday(d) >= 1 && weekday(d) <= 5 && !Y.off.has(d) && Y.periods.some(p => d >= p.s && d < p.e);
+const schoolDays = (Y, a, b) => { let n = 0; for (let d = a; d < b; d++) n += isSchool(Y, d); return n; };
+function dayAct(days, d) {                              // ce qui a été fait ce jour-là, sans les résultats
+  const x = days[d]; if (!x) return null;
+  const q = x.q || {}, nq = Object.values(q).reduce((a, b) => a + b, 0);
+  return x.n || nq ? { q, nq, n: x.n || 0 } : null;
+}
+function sumRange(days, a, b) {
+  const r = { active: 0, quiz: 0, mats: {} };
+  for (let d = a; d < b; d++) {
+    const x = dayAct(days, d); if (!x) continue;
+    r.active++; r.quiz += x.nq;
+    for (const [m, c] of Object.entries(x.q)) r.mats[m] = (r.mats[m] || 0) + c;
+  }
+  return r;
+}
+const matChips = mats => Object.entries(mats).sort((a, b) => b[1] - a[1])
+  .map(([m, c]) => `<span class="mchip" style="--h:${hue(m)}">${matEmo(m)} ${esc(m)} <b>${c}</b></span>`).join('');
+function ensureDayQuiz() {      // quiz par matière et par jour : reconstitués une fois depuis l'historique des matières
+  if (ST.qv) return;
+  for (const d of Object.values(ST.days)) delete d.q;
+  for (const [mat, m] of Object.entries(ST.mats)) for (const s of m.sessions || []) {
+    const d = ST.days[s.d] ||= { xp: 0, ok: 0, n: 0 };
+    (d.q ||= {})[mat] = (d.q[mat] || 0) + 1;
+  }
+  ST.qv = 1; saveStats();
+}
+function frise(Y, t, nav) {     // l'année d'un coup d'œil : les 5 périodes, les vacances, et où on en est
+  let h = '';
+  for (const p of Y.periods) {
+    const f = Math.max(0, Math.min(1, (t + 1 - p.s) / (p.e - p.s)));
+    h += `<div class="fz-p${f >= .5 ? ' on' : ''}" style="flex:${p.e - p.s}"${nav ? ` onclick="act.pathGo(${p.n})"` : ''}><div style="width:${(f * 100).toFixed(1)}%"></div><span>P${p.n}</span></div>`;
+    if (p.hol.name !== 'Été') h += `<div class="fz-h" style="flex:${p.hol.e - p.hol.s}" title="Vacances ${HOL_OF[p.hol.name]}">${HOL_EMO[p.hol.name]}</div>`;
+  }
+  const pos = Math.max(0, Math.min(1, (t - Y.start + .5) / (Y.end - Y.start + 10)));
+  return `<div class="frise">${h}<div class="fz-h" style="flex:10">☀️</div><img class="fz-me" src="icon-192.png" alt="" style="left:${(pos * 100).toFixed(1)}%"></div>`;
+}
+function pathWhere(Y, t) {      // une phrase : où on en est dans l'année
+  const p = Y.periods.find(p => t < p.hol.e) || Y.periods[Y.periods.length - 1];
+  if (t < Y.start) return 'La rentrée approche';
+  if (t >= p.s && t < p.e) {
+    const left = schoolDays(Y, t + 1, p.e), hol = `${HOL_EMO[p.hol.name]} vacances ${HOL_OF[p.hol.name]}`;
+    return left ? `Période ${p.n} · encore ${left} jour${left > 1 ? 's' : ''} d'école avant les ${hol}` : `Dernier jour d'école avant les ${hol}`;
+  }
+  return `${HOL_EMO[p.hol.name]} Vacances ${HOL_OF[p.hol.name]} : bonnes vacances !`;
+}
+async function pathTeaser() {
+  await loadStats();
+  const t = today(), Y = schoolYear(t, await KV.get('zone', '') || 'B');
+  return `<a class="card path-teaser" href="#/chemin"><div class="row" style="justify-content:space-between">
+    <b>🗺️ Mon chemin</b><span class="small mute">${pathWhere(Y, t)}</span></div>${frise(Y, t, false)}</a>`;
+}
+function demoDays(start, t) {   // aperçu : une année inventée jusqu'au jour t (rien n'est enregistré)
+  let seed = 11; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+  const mats = ['Maths', 'Français', 'Anglais', 'Histoire-Géo', 'SVT', 'Physique-Chimie'], days = {};
+  for (let d = start + 6; d <= t; d++) {
+    const wd = weekday(d); if (rnd() > (wd === 0 || wd === 6 ? .2 : .62)) continue;
+    const q = {};
+    for (let i = 0, k = rnd() < .3 ? 2 : 1; i < k; i++) { const m = mats[Math.floor(rnd() * mats.length)]; q[m] = (q[m] || 0) + (rnd() < .2 ? 2 : 1); }
+    days[d] = { xp: 0, ok: 0, n: 6, q };
+  }
+  return days;
+}
+let pathModel = null;
+const PATH_DEMO_DAY = dayNum('2027-03-17');
+async function viewPath(mode) {
+  await loadStats(); ensureDayQuiz();
+  const demo = mode === 'demo', t = demo ? PATH_DEMO_DAY : today();
+  const zone = await KV.get('zone', '') || 'B', name = await KV.get('name', '') || 'Eden';
+  const Y = schoolYear(t, zone), days = demo ? demoDays(Y.start, t) : ST.days;
+  const firsts = Object.keys(days).map(Number).filter(d => dayAct(days, d));
+  pathModel = { Y, t, days, name, first: firsts.length ? Math.min(...firsts) : null };
+  const all = sumRange(days, Y.start, Math.min(t + 1, Y.end));
+  let h = '';
+  for (const [i, p] of Y.periods.entries()) {
+    const st = t >= p.e ? 'done' : t >= p.s ? 'now' : 'fut';
+    const title = `Période ${p.n} · ${i ? Y.periods[i - 1].hol.name : 'Rentrée'} → ${p.hol.name}`;
+    let lastDay = p.e - 1; while (lastDay > p.s && !isSchool(Y, lastDay)) lastDay--;
+    const range = `du ${frDay(p.s)} au ${frDay(lastDay)}`;
+    const weeks = Math.ceil((p.e - mondayOf(p.s)) / 7);
+    if (st === 'fut') {
+      h += `<div class="card pcard fut" id="pseg-${p.n}">🔒 <b>${title}</b><div class="small mute">${range} · ${weeks} semaines</div></div>`;
+      continue;
+    }
+    const s = sumRange(days, p.s, Math.min(p.e, t + 1));
+    h += `<section class="card pcard" id="pseg-${p.n}">
+      <div class="row" style="justify-content:space-between"><div><b>${title}</b><div class="small mute">${range}</div></div>
+        ${st === 'done' ? '<span class="badge good-b">🏁 terminée</span>' : `<span class="badge">📍 semaine ${Math.floor((t - mondayOf(p.s)) / 7) + 1} sur ${weeks}</span>`}</div>
+      <p class="small" style="margin:10px 0 6px">🗓️ <b>${s.active}</b> jour${s.active > 1 ? 's' : ''} de révision · 🎮 <b>${s.quiz}</b> quiz</p>
+      <div class="mchips">${matChips(s.mats)}</div>
+      <div class="trail" data-p="${i}"></div></section>`;
+    const hs = sumRange(days, p.hol.s, Math.min(p.hol.e, t + 1)), hst = t >= p.hol.e ? 'done' : t >= p.hol.s ? 'now' : 'fut';
+    const left = schoolDays(Y, t + 1, p.e);
+    h += `<div class="holcard ${hst}"><div class="hol-e">${HOL_EMO[p.hol.name]}</div><div style="flex:1">
+      <b>Vacances ${HOL_OF[p.hol.name]}</b><div class="small mute">${p.hol.name === 'Été' ? `à partir du ${frDay(p.hol.s)}` : `du ${frDay(p.hol.s)} au ${frDay(p.hol.e - 1)}`}</div>
+      <div class="small">${hst === 'fut' ? (left ? `Encore ${left} jour${left > 1 ? 's' : ''} d'école` : "C'est le dernier jour d'école 🎉")
+        : hs.quiz ? `🏖️ ${hs.quiz} quiz pendant les vacances, bravo !` : hst === 'now' ? `Bonnes vacances, ${esc(name)} !` : 'Repos bien mérité 😴'}</div>
+      ${hs.quiz ? `<div class="mchips">${matChips(hs.mats)}</div>` : ''}</div>
+      ${hst === 'now' ? '<img class="hol-me" src="icon-192.png" alt="">' : ''}</div>`;
+  }
+  setView(`<h1>🗺️ Le chemin ${esc(deName(name))}</h1>
+  ${demo ? `<div class="card notice">👀 Aperçu avec des données inventées, comme si on était le ${frDay(t)} 2027. Rien n'est enregistré.</div>` : ''}
+  <div class="card"><div class="row" style="justify-content:space-between"><b>Année ${Y.label}</b><span class="small mute">${pathWhere(Y, t)}</span></div>
+    ${frise(Y, t, true)}
+    <p class="small" style="margin:0 0 6px">Depuis la rentrée : 🗓️ <b>${all.active}</b> jour${all.active > 1 ? 's' : ''} de révision · 🎮 <b>${all.quiz}</b> quiz · 📚 <b>${Object.keys(all.mats).length}</b> matière${Object.keys(all.mats).length > 1 ? 's' : ''}</p>
+    <div class="mchips">${matChips(all.mats)}</div></div>
+  ${h}
+  <div id="ptip" class="card" hidden></div>`);
+  drawTrails(true);
+  const cur = Y.periods.find(p => t < p.hol.e);
+  if (cur && cur.n > 1) setTimeout(() => $('#pseg-' + cur.n)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+}
+function drawTrails(animate) {   // la route de chaque période, mesurée à la largeur de l'écran
+  if (!pathModel) return;
+  const { Y, t, days, first } = pathModel, still = !animate || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const obs = still ? null : new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('go'); obs.unobserve(e.target); }
+  }), { threshold: .2 });
+  for (const el of document.querySelectorAll('.trail')) {
+    const p = Y.periods[+el.dataset.p], W = el.clientWidth, padX = 46, RH = 88, top = 44, gap = (W - 2 * padX) / 4;
+    const slots = [];
+    let rows = 0;
+    for (let w = mondayOf(p.s); w < p.e; w += 7, rows++)
+      for (let i = 0; i < 5; i++) if (w + i >= p.s && w + i < p.e)
+        slots.push({ d: w + i, r: rows, i, w, x: padX + gap * (rows % 2 ? 4 - i : i), y: top + rows * RH });
+    const side = r => r % 2 ? -1 : 1;                    // après une ligne paire, la route tourne à droite
+    const seg = slots.map((s, k) => !k ? `M${s.x} ${s.y}` : s.r === slots[k - 1].r ? `L${s.x} ${s.y}`
+      : `C${slots[k - 1].x + 54 * side(slots[k - 1].r)} ${slots[k - 1].y} ${s.x + 54 * side(slots[k - 1].r)} ${s.y} ${s.x} ${s.y}`);
+    let j = -1; slots.forEach((s, k) => { if (s.d <= t) j = k; });
+    const dur = Math.min(2.6, .6 + j * .07), H = top + (rows - 1) * RH + 52;
+    let nodes = '', extra = '';
+    slots.forEach((s, k) => {
+      const a = dayAct(days, s.d), off = Y.off.has(s.d), ms = a ? Object.keys(a.q).sort((x, y) => a.q[y] - a.q[x]) : [];
+      const cls = ['pn', off ? 'off' : a ? 'act' : s.d > t ? 'fut' : '', ms.length > 1 ? 'two' : '', s.d === t ? 'now' : ''].filter(Boolean).join(' ');
+      const inner = off ? '🎉' : a ? (ms.length ? ms.slice(0, 2).map(matEmo).join('') : '✏️') : '';
+      const dom = new Date(s.d * 86400000).getUTCDate();
+      const label = !k || dom === 1 || (k && new Date(slots[k - 1].d * 86400000).getUTCMonth() !== new Date(s.d * 86400000).getUTCMonth())
+        ? fmtDay(s.d, { day: 'numeric', month: 'short' }) : dom;
+      nodes += `<div class="ps" style="left:${s.x}px;top:${s.y}px;--dl:${j > 0 ? (k / j * dur).toFixed(2) : 0}s">
+        <button class="${cls}" style="--h:${hue(ms[0] || '')}" onclick="act.pathDay(${s.d})" aria-label="${esc(fmtDay(s.d, { weekday: 'long', day: 'numeric', month: 'long' }))}">${inner}${a?.nq > 1 ? `<i>${a.nq}</i>` : ''}</button>
+        <span class="pl">${label}</span></div>`;
+      if (s.d === first) extra += `<span class="pflag" style="left:${s.x}px;top:${s.y - 30}px">🚩</span>`;
+      const last = !slots[k + 1] || slots[k + 1].w !== s.w;
+      if (last) {                                       // le week-end, dans le virage
+        const we = sumRange(days, s.w + 5, Math.min(s.w + 7, p.e, t + 1));
+        if (we.quiz || we.active) {
+          const nx = slots[k + 1], wx = s.x + (nx ? 40 : 30) * side(s.r), wy = nx ? s.y + RH / 2 : s.y - 30;
+          extra += `<button class="pw" style="left:${wx}px;top:${wy}px;--dl:${j > 0 ? (Math.min(k, j) / j * dur).toFixed(2) : 0}s" onclick="act.pathDay(${s.w + 5}, true)" aria-label="Week-end">⭐${we.quiz ? `<i>${we.quiz}</i>` : ''}</button>`;
+        }
+      }
+    });
+    const end = slots[slots.length - 1];
+    if (t >= p.e && end) extra += `<span class="pflag end" style="left:${end.x}px;top:${end.y - 34}px">🏁</span>`;
+    if (j >= 0 && t < p.e) extra += `<img class="pav" src="icon-192.png" alt="" style="left:${slots[j].x}px;top:${slots[j].y - 24}px;--dl:${dur}s">`;
+    el.style.height = H + 'px';
+    el.innerHTML = `<svg width="${W}" height="${H}" aria-hidden="true"><path class="road" d="${seg.join(' ')}"/>
+      ${j >= 0 ? `<path class="walk" d="${seg.slice(0, j + 1).join(' ')}"/>` : ''}</svg>${nodes}${extra}`;
+    const walk = el.querySelector('.walk');
+    el.classList.remove('anim', 'go');
+    if (walk && obs) {
+      const L = walk.getTotalLength();
+      walk.style.strokeDasharray = L; walk.style.strokeDashoffset = L; el.style.setProperty('--dur', dur + 's');
+      el.classList.add('anim'); obs.observe(el);
+    }
+  }
+}
+act.pathGo = n => $('#pseg-' + n)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+act.pathDay = (d, weekend) => {
+  const { Y, t, days } = pathModel, q = {};
+  let n = 0;
+  for (const x of weekend ? [d, d + 1] : [d]) {
+    const a = dayAct(days, x); if (!a) continue;
+    n += a.n; for (const [m, c] of Object.entries(a.q)) q[m] = (q[m] || 0) + c;
+  }
+  const rows = Object.entries(q).sort((a, b) => b[1] - a[1])
+    .map(([m, c]) => `<div class="tip-row"><span>${matEmo(m)} ${esc(m)}</span><b>${c} quiz</b></div>`).join('');
+  const body = rows || (n ? '<p>✏️ Des questions travaillées, sans quiz terminé.</p>'
+    : !weekend && Y.off.has(d) ? "<p>🎉 Pas d'école ce jour-là (férié ou pont).</p>"
+    : d > t ? '<p class="mute">À venir…</p>' : '<p class="mute">Pas de révision ce jour-là.</p>');
+  const tip = $('#ptip');
+  tip.innerHTML = `<button class="tip-x" onclick="$('#ptip').hidden=true" aria-label="Fermer">✕</button>
+    <b>${weekend ? `Week-end du ${frDay(d)}` : cap(fmtDay(d, { weekday: 'long', day: 'numeric', month: 'long' }))}</b>${body}`;
+  tip.hidden = false;
+};
+let pathResize = null;
+window.addEventListener('resize', () => {
+  clearTimeout(pathResize);
+  pathResize = setTimeout(() => { if (location.hash.startsWith('#/chemin')) drawTrails(false); }, 200);
+});
 
 // --- Séance de révision
 let S = null;
@@ -1260,7 +1543,7 @@ function confetti() {
 
 // --- Réglages
 async function viewSettings() {
-  const name = await KV.get('name', '') || 'Eden', goal = await KV.get('goal', 50);
+  const name = await KV.get('name', '') || 'Eden', goal = await KV.get('goal', 50), zone = await KV.get('zone', '') || 'B';
   let storage = '';
   try {
     const est = await navigator.storage.estimate(), persisted = await navigator.storage.persisted();
@@ -1274,6 +1557,9 @@ async function viewSettings() {
     <select id="s-goal">${[[30, 'Tranquille'], [50, 'Normal'], [80, 'Sérieux'], [120, 'Intense']].map(([v, t]) =>
       `<option value="${v}"${v === goal ? ' selected' : ''}>${t} — ${v} XP (environ ${Math.max(1, Math.round(v / 60))} quiz)</option>`).join('')}</select>
     <p class="small mute">Une bonne réponse rapporte ${XP_OK} XP, un quiz terminé ${XP_END} XP de bonus (le double sans faute).</p>
+    <label for="s-zone">Vacances scolaires</label>
+    <select id="s-zone">${['A', 'B', 'C'].map(z => `<option value="${z}"${z === zone ? ' selected' : ''}>Zone ${z}</option>`).join('')}</select>
+    <p class="small mute">Place les vacances d'hiver et de printemps sur le chemin.</p>
     <label for="s-theme">Thème <span class="mute small">(sur cet appareil)</span></label>
     <select id="s-theme" onchange="act.setTheme(this.value)">${[['auto', 'Automatique (comme l\'appareil)'], ['light', 'Clair'], ['dark', 'Sombre']].map(([v, t]) =>
       `<option value="${v}"${v === themeNow() ? ' selected' : ''}>${t}</option>`).join('')}</select>
@@ -1305,7 +1591,7 @@ function themeNow() { try { return localStorage.getItem('theme') || 'auto'; } ca
 act.setTheme = t => { try { localStorage.setItem('theme', t); } catch {} applyTheme(t); };
 act.saveSettings = async () => {
   const name = $('#s-name').value.trim(), goal = +$('#s-goal').value;
-  await KV.set('name', name); await KV.set('goal', goal);
+  await KV.set('name', name); await KV.set('goal', goal); await KV.set('zone', $('#s-zone').value);
   toast('Réglages enregistrés'); go('#/');
 };
 
@@ -1353,13 +1639,14 @@ function setSync(state) {
 const strip = l => { const { photos, files, _up, _synced, ...rest } = l; return { ...rest, nPhotos: (photos || []).length }; };
 async function localMeta() {
   return { at: await KV.get('metaAt', Date.now()), stats: await loadStats(), streak: await KV.get('streak', null),
-    goal: await KV.get('goal', 50), name: await KV.get('name', '') };
+    goal: await KV.get('goal', 50), name: await KV.get('name', ''), zone: await KV.get('zone', '') };
 }
 async function applyMeta(m) {
   ST = m.stats; await KV.set('stats', m.stats, true);
   if (m.streak) await KV.set('streak', m.streak, true);
   if (m.goal) await KV.set('goal', m.goal, true);
   if (m.name) await KV.set('name', m.name, true);
+  if (m.zone) await KV.set('zone', m.zone, true);
   await KV.set('metaAt', m.at || Date.now()); renderStreak();
 }
 async function pushLesson(id) {
@@ -1597,7 +1884,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- Routeur ----------
-const routes = { '': viewHome, progress: viewProgress, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings };
+const routes = { '': viewHome, progress: viewProgress, new: viewNew, photos: viewPhotos, package: viewPackage, print: viewPrint, review: viewReview, lesson: viewLesson, fiche: viewFiche, daily: viewDaily, play: viewPlay, settings: viewSettings, chemin: viewPath };
 async function route() {
   if (!unlocked) return viewLock();
   const [name, ...args] = location.hash.replace(/^#\/?/, '').split('/');
