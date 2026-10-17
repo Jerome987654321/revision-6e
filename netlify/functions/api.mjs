@@ -20,8 +20,9 @@ const same = (secret, rec) => {
 
 function cors(req) {
   const origin = req.headers.get("origin");
-  const allowed = env("ALLOWED_ORIGINS").split(",").map(s => s.trim()).filter(Boolean);
-  if (!origin || (!allowed.includes(origin) && origin !== new URL(req.url).origin)) return {};
+  // Les navigateurs écrivent l'adresse en minuscules (pseudo GitHub avec majuscules) : comparaison sans la casse.
+  const allowed = env("ALLOWED_ORIGINS").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (!origin || (!allowed.includes(origin.toLowerCase()) && origin !== new URL(req.url).origin)) return {};
   return { "access-control-allow-origin": origin, "access-control-allow-headers": "authorization, content-type",
     "access-control-allow-methods": "GET, PUT, POST, DELETE", "access-control-max-age": "86400", vary: "origin" };
 }
